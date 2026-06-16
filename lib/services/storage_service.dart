@@ -12,6 +12,7 @@ class StorageService {
   static const _kDailyDate = 'daily_date'; // yyyy-mm-dd of saved board
   static const _kDailyGuesses = 'daily_guesses'; // csv of guesses
   static const _kDailyDone = 'daily_done'; // bool
+  static const _kBrokenStreak = 'broken_streak'; // streak value a rewarded ad can restore
 
   late final SharedPreferences _prefs;
 
@@ -44,6 +45,7 @@ class StorageService {
   }) async {
     final today = _dayKey(now ?? DateTime.now());
     var s = loadStats();
+    final prevStreak = s.currentStreak;
 
     final dist = List<int>.from(s.guessDistribution);
     if (won && guessesUsed != null && guessesUsed < dist.length) {
@@ -51,13 +53,23 @@ class StorageService {
     }
 
     int newStreak;
+    int brokenStreak = 0; // > 0 => a non-trivial streak just ended; restorable.
     if (won) {
       final last = _prefs.getString(_kLastWonDate);
-      newStreak = _isYesterday(last, today) ? s.currentStreak + 1 : 1;
+      if (_isYesterday(last, today)) {
+        newStreak = prevStreak + 1; // consecutive day: keep building.
+      } else {
+        // First win, or a gap since the last win. A real streak was broken.
+        newStreak = 1;
+        if (prevStreak > 0) brokenStreak = prevStreak + 1; // bridge the gap + today.
+      }
       await _prefs.setString(_kLastWonDate, today);
     } else {
       newStreak = 0;
+      if (prevStreak > 0) brokenStreak = prevStreak; // a loss ended the streak.
     }
+
+    await _prefs.setInt(_kBrokenStreak, brokenStreak);
 
     s = s.copyWith(
       gamesPlayed: s.gamesPlayed + 1,
@@ -70,13 +82,24 @@ class StorageService {
     return s;
   }
 
-  /// Allows "restore streak" via a rewarded ad after a missed day / loss.
-  Future<GameStats> restoreStreak(int toValue) async {
+  /// The streak value a rewarded "restore streak" can bring back after the most
+  /// recent finished daily, or 0 if there is nothing to restore.
+  int pendingRestoreStreak() => _prefs.getInt(_kBrokenStreak) ?? 0;
+
+  /// Restores a broken streak (called after the user watches a rewarded ad).
+  /// Marks today as won so tomorrow's win continues the run, and clears the
+  /// pending restore so it can only be redeemed once. Returns updated stats.
+  Future<GameStats> restoreStreak({DateTime? now}) async {
+    final pending = pendingRestoreStreak();
+    if (pending <= 0) return loadStats();
+    final today = _dayKey(now ?? DateTime.now());
     final s = loadStats();
     final restored = s.copyWith(
-      currentStreak: toValue,
-      bestStreak: toValue > s.bestStreak ? toValue : s.bestStreak,
+      currentStreak: pending,
+      bestStreak: pending > s.bestStreak ? pending : s.bestStreak,
     );
+    await _prefs.setString(_kLastWonDate, today);
+    await _prefs.setInt(_kBrokenStreak, 0);
     await _saveStats(restored);
     return restored;
   }

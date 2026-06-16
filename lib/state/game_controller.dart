@@ -165,6 +165,21 @@ class GameController extends ChangeNotifier {
     });
   }
 
+  /// True when the just-finished daily broke a streak that a rewarded ad could
+  /// bring back. Drives the "Restore streak" offer in the stats sheet.
+  bool get canRestoreStreak =>
+      _mode == GameMode.daily && _gameOver && _storage.pendingRestoreStreak() > 0;
+
+  /// Restores a broken streak after the user watches a rewarded ad.
+  void restoreStreak() {
+    if (!canRestoreStreak) return;
+    _ads.showRewarded(onReward: () async {
+      _stats = await _storage.restoreStreak();
+      _flash('Streak restored to ${_stats.currentStreak}!');
+      notifyListeners();
+    });
+  }
+
   // --- helpers -------------------------------------------------------------
 
   void _applyToKeyboard(String guess) {
