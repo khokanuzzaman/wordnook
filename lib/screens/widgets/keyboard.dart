@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../state/game_controller.dart';
 import '../../theme/app_theme.dart';
 
@@ -34,7 +35,10 @@ class Keyboard extends StatelessWidget {
       child: Padding(
         padding: const EdgeInsets.all(3),
         child: InkWell(
-          onTap: () => controller.onKey(label),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            controller.onKey(label);
+          },
           borderRadius: BorderRadius.circular(6),
           child: Container(
             height: 52,

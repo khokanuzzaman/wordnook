@@ -33,7 +33,14 @@ class BoardGrid extends StatelessWidget {
           children: List.generate(c.wordLength, (col) {
             final ch = col < letters.length ? letters[col] : ' ';
             final st = statuses == null ? LetterStatus.empty : statuses[col];
-            return LetterTile(letter: ch.trim(), status: st);
+            // Key flips from "empty" to "revealed" on submit, remounting the
+            // tile so its reveal animation plays exactly once.
+            return LetterTile(
+              key: ValueKey('$row-$col-${st == LetterStatus.empty ? 'e' : 'r'}'),
+              letter: ch.trim(),
+              status: st,
+              column: col,
+            );
           }),
         ),
       );

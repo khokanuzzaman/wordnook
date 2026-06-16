@@ -25,6 +25,9 @@ class GameController extends ChangeNotifier {
   final StorageService _storage;
   final AdsService _ads;
 
+  /// Exposed for the settings screen (reminder prefs, onboarding flag).
+  StorageService get storage => _storage;
+
   static const int maxGuesses = 6;
   int get wordLength => WordRepository.wordLength;
 
@@ -120,8 +123,10 @@ class GameController extends ChangeNotifier {
     if (solved) {
       _won = true;
       _gameOver = true;
+      _message = _winMessage(_guesses.length);
     } else if (_guesses.length >= maxGuesses) {
       _gameOver = true;
+      _message = 'Out of guesses — the word was $_answer';
     }
 
     if (_mode == GameMode.daily) {
@@ -208,6 +213,20 @@ class GameController extends ChangeNotifier {
         _keyStatus[c] = s;
       }
     }
+  }
+
+  /// Praise scaled to how few guesses it took.
+  String _winMessage(int guesses) {
+    const praise = [
+      'Genius!', // 1
+      'Magnificent!', // 2
+      'Impressive!', // 3
+      'Splendid!', // 4
+      'Great!', // 5
+      'Phew!', // 6
+    ];
+    final i = (guesses - 1).clamp(0, praise.length - 1);
+    return praise[i];
   }
 
   void _flash(String msg) {

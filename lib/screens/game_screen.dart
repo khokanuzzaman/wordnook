@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
+import 'how_to_play_sheet.dart';
+import 'settings_screen.dart';
 import 'stats_sheet.dart';
 import 'widgets/board_grid.dart';
 import 'widgets/keyboard.dart';
@@ -21,12 +24,23 @@ class _GameScreenState extends State<GameScreen> {
     super.initState();
     c.startGame(GameMode.daily);
     c.addListener(_onChange);
+    _maybeOnboard();
   }
 
   @override
   void dispose() {
     c.removeListener(_onChange);
     super.dispose();
+  }
+
+  /// Show the how-to-play sheet once, on first ever launch.
+  void _maybeOnboard() {
+    if (c.storage.onboardingSeen) return;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      await HowToPlaySheet.show(context);
+      await c.storage.setOnboardingSeen();
+    });
   }
 
   void _onChange() {
@@ -40,32 +54,41 @@ class _GameScreenState extends State<GameScreen> {
     }
     if (c.gameOver && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (mounted) _maybeShowEnd();
+        if (mounted) _handleGameOver();
       });
     }
   }
 
   bool _endShown = false;
-  void _maybeShowEnd() {
+  void _handleGameOver() {
     if (_endShown) return;
     _endShown = true;
-    StatsSheet.show(context, c);
+    // Reveal flip runs first; let it finish before the haptic + stats sheet.
+    if (c.won) {
+      HapticFeedback.mediumImpact();
+    } else {
+      HapticFeedback.heavyImpact();
+    }
+    Future.delayed(const Duration(milliseconds: 700), () {
+      if (mounted) StatsSheet.show(context, c);
+    });
+  }
+
+  void _toggleMode() {
+    _endShown = false;
+    c.startGame(
+      c.mode == GameMode.daily ? GameMode.practice : GameMode.daily,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        // TODO: replace with your brand name (NOT "Wordle").
         title: const Text('Daily Word'),
         actions: [
           TextButton(
-            onPressed: () {
-              _endShown = false;
-              c.startGame(
-                c.mode == GameMode.daily ? GameMode.practice : GameMode.daily,
-              );
-            },
+            onPressed: _toggleMode,
             child: Text(
               c.mode == GameMode.daily ? 'Daily' : 'Practice',
               style: const TextStyle(
@@ -83,6 +106,24 @@ class _GameScreenState extends State<GameScreen> {
             tooltip: 'Stats',
             onPressed: () => StatsSheet.show(context, c),
             icon: const Icon(Icons.bar_chart),
+          ),
+          PopupMenuButton<String>(
+            onSelected: (value) {
+              switch (value) {
+                case 'how':
+                  HowToPlaySheet.show(context);
+                case 'settings':
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => SettingsScreen(storage: c.storage),
+                    ),
+                  );
+              }
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'how', child: Text('How to play')),
+              PopupMenuItem(value: 'settings', child: Text('Settings')),
+            ],
           ),
         ],
       ),
