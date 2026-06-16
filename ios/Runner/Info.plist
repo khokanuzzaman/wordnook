@@ -12,6 +12,10 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
+	<!-- AdMob app ID. Google's PUBLIC sample app ID (safe for dev).
+	     Replace with the real AdMob app ID before release. -->
+	<key>GADApplicationIdentifier</key>
+	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>CFBundleName</key>
 	<string>daily_word_game</string>
 	<key>CFBundlePackageType</key>
