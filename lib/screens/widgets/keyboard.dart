@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import '../../models/letter_status.dart';
 import '../../state/game_controller.dart';
 import '../../theme/app_theme.dart';
 
