@@ -13,6 +13,10 @@ class StorageService {
   static const _kDailyGuesses = 'daily_guesses'; // csv of guesses
   static const _kDailyDone = 'daily_done'; // bool
   static const _kBrokenStreak = 'broken_streak'; // streak value a rewarded ad can restore
+  static const _kReminderEnabled = 'reminder_enabled'; // bool
+  static const _kReminderHour = 'reminder_hour'; // int 0..23
+  static const _kReminderMinute = 'reminder_minute'; // int 0..59
+  static const _kOnboardingSeen = 'onboarding_seen'; // bool
 
   late final SharedPreferences _prefs;
 
@@ -130,6 +134,25 @@ class StorageService {
     await _prefs.setString(_kDailyGuesses, guesses.join(','));
     await _prefs.setBool(_kDailyDone, done);
   }
+
+  // --- Daily reminder settings --------------------------------------------
+
+  bool get reminderEnabled => _prefs.getBool(_kReminderEnabled) ?? true;
+  int get reminderHour => _prefs.getInt(_kReminderHour) ?? 9;
+  int get reminderMinute => _prefs.getInt(_kReminderMinute) ?? 0;
+
+  Future<void> setReminderEnabled(bool value) =>
+      _prefs.setBool(_kReminderEnabled, value);
+
+  Future<void> setReminderTime(int hour, int minute) async {
+    await _prefs.setInt(_kReminderHour, hour);
+    await _prefs.setInt(_kReminderMinute, minute);
+  }
+
+  // --- Onboarding ----------------------------------------------------------
+
+  bool get onboardingSeen => _prefs.getBool(_kOnboardingSeen) ?? false;
+  Future<void> setOnboardingSeen() => _prefs.setBool(_kOnboardingSeen, true);
 
   // --- helpers -------------------------------------------------------------
 
