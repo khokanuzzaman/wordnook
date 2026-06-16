@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:share_plus/share_plus.dart';
 import '../models/game_result.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
@@ -66,10 +67,13 @@ class StatsSheet extends StatelessWidget {
               ],
               const SizedBox(height: 16),
               FilledButton.icon(
-                onPressed: () {
-                  Navigator.pop(context);
-                  // TODO(phase 4): Share.share(controller.buildShareText());
-                },
+                onPressed: controller.shareText == null
+                    ? null
+                    : () {
+                        final text = controller.shareText!;
+                        Navigator.pop(context);
+                        Share.share(text);
+                      },
                 icon: const Icon(Icons.share),
                 label: const Text('Share result'),
               ),

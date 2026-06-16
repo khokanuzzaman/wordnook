@@ -57,6 +57,12 @@ class WordRepository {
     return _answers[i < 0 ? i + _answers.length : i];
   }
 
+  /// The 1-based daily puzzle number for [date] (day 1 = the epoch).
+  int dailyNumber([DateTime? date]) {
+    final d = (date ?? DateTime.now()).toUtc();
+    return DateTime.utc(d.year, d.month, d.day).difference(_epoch).inDays + 1;
+  }
+
   /// A random answer, for Practice mode.
   String randomWord() => _answers[_rng.nextInt(_answers.length)];
 

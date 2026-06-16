@@ -1,7 +1,9 @@
 import 'package:flutter/foundation.dart';
 
+import '../branding.dart';
 import '../data/word_repository.dart';
 import '../logic/game_engine.dart';
+import '../logic/share_formatter.dart';
 import '../models/game_result.dart';
 import '../models/letter_status.dart';
 import '../services/ads_service.dart';
@@ -163,6 +165,20 @@ class GameController extends ChangeNotifier {
       _flash('Extra guess granted');
       notifyListeners();
     });
+  }
+
+  /// Builds the shareable result text (our own emoji style). Returns null when
+  /// there's nothing to share yet (no guesses submitted).
+  String? get shareText {
+    if (_guesses.isEmpty) return null;
+    return ShareFormatter.build(
+      appName: Branding.appName,
+      dayNumber: _mode == GameMode.daily ? _words.dailyNumber() : null,
+      guesses: _guesses,
+      answer: _answer,
+      won: _won,
+      maxGuesses: maxGuesses,
+    );
   }
 
   /// True when the just-finished daily broke a streak that a rewarded ad could
