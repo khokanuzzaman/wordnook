@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 import '../../models/letter_status.dart';
 import '../../state/game_controller.dart';
@@ -12,7 +14,14 @@ class BoardGrid extends StatelessWidget {
     final c = controller;
     final rows = <Widget>[];
 
-    for (var row = 0; row < GameController.maxGuesses; row++) {
+    // Normally maxGuesses rows; if a rewarded extra guess re-opened the game
+    // past the limit, grow to fit the new active row.
+    final rowCount = math.max(
+      GameController.maxGuesses,
+      c.guesses.length + (c.gameOver ? 0 : 1),
+    );
+
+    for (var row = 0; row < rowCount; row++) {
       String letters;
       List<LetterStatus>? statuses;
 

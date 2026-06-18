@@ -26,6 +26,14 @@ class _GameScreenState extends State<GameScreen> {
     c.startGame(GameMode.daily);
     c.addListener(_onChange);
     _maybeOnboard();
+    // A returning player whose daily is already finished should still see the
+    // stats sheet — startGame ran before the listener was attached, so handle
+    // that initial game-over case explicitly.
+    if (c.mode == GameMode.daily && c.gameOver) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) _handleGameOver();
+      });
+    }
   }
 
   @override
@@ -45,6 +53,10 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   void _onChange() {
+    // The game re-opened (new game or a rewarded extra guess) — allow the
+    // end-of-game flow to fire again next time.
+    if (!c.gameOver) _endShown = false;
+
     final msg = c.message;
     if (msg != null && mounted) {
       ScaffoldMessenger.of(context).removeCurrentSnackBar();
