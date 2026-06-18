@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../branding.dart';
+import '../services/iap_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
 import 'how_to_play_sheet.dart';
@@ -76,6 +77,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
             onTap: _reminderEnabled ? _onPickTime : null,
           ),
           const Divider(),
+          _RemoveAdsTile(),
+          const Divider(),
           ListTile(
             title: const Text('How to play'),
             trailing: const Icon(Icons.help_outline),
@@ -89,6 +92,65 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// Remove Ads purchase / restore, reacting to IAP state.
+class _RemoveAdsTile extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final iap = IapService.instance;
+    return ListenableBuilder(
+      listenable: iap,
+      builder: (context, _) {
+        if (iap.adsRemoved) {
+          return const ListTile(
+            leading: Icon(Icons.check_circle, color: Color(0xFF2A9D8F)),
+            title: Text('Ads removed'),
+            subtitle: Text('Thanks for your support!'),
+          );
+        }
+        final price = iap.priceLabel;
+        final canBuy = iap.available && iap.removeAdsProduct != null;
+        return Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: const Icon(Icons.block),
+              title: const Text('Remove ads'),
+              subtitle: Text(
+                canBuy
+                    ? 'One-time purchase. Removes interstitials and banners.'
+                    : 'Currently unavailable on this device.',
+              ),
+              trailing: iap.purchasePending
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : (canBuy
+                      ? FilledButton(
+                          onPressed: iap.buyRemoveAds,
+                          child: Text(price ?? 'Buy'),
+                        )
+                      : null),
+            ),
+            if (iap.available)
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 16, bottom: 4),
+                  child: TextButton(
+                    onPressed: iap.restorePurchases,
+                    child: const Text('Restore purchases'),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 }

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'data/word_repository.dart';
 import 'services/ads_service.dart';
+import 'services/iap_service.dart';
 import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 import 'state/game_controller.dart';
@@ -16,6 +17,11 @@ Future<void> main() async {
 
   final words = WordRepository();
   await words.load();
+
+  // Reflect any owned "Remove Ads" entitlement before ads load, then start the
+  // store listener (both fire-and-forget so they don't block first paint).
+  AdsService.instance.removeAds = storage.removeAds;
+  unawaited(IapService.instance.init(storage));
 
   // Ads init is fire-and-forget so it doesn't block first paint.
   // Comment this out if running on a platform without AdMob configured yet.
