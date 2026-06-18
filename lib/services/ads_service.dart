@@ -1,5 +1,13 @@
 import 'dart:io' show Platform;
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
+
+/// The slice of ad behaviour the game controller depends on. Kept narrow so it
+/// can be faked in unit tests without the AdMob plugin.
+abstract interface class GameAds {
+  Future<void> showRewarded({required void Function() onReward});
+  void maybeShowJourneyInterstitial();
+}
 
 /// Thin wrapper around AdMob. Defaults to Google's PUBLIC TEST ad unit IDs so
 /// the app runs in development without real inventory. Override with real IDs
@@ -7,8 +15,9 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 ///
 /// Placements:
 ///   - rewarded:    hint / reveal letter / extra guess / streak restore
-///   - interstitial: Practice mode round-end ONLY, frequency-capped
-class AdsService {
+///   - interstitial: Journey level-end ONLY, frequency-capped
+///   - banner:      stats screen (suppressed when Remove Ads is owned)
+class AdsService implements GameAds {
   AdsService._();
   static final AdsService instance = AdsService._();
 
@@ -25,9 +34,14 @@ class AdsService {
   RewardedAd? _rewarded;
   InterstitialAd? _interstitial;
 
-  // Frequency cap for Practice interstitials.
-  int _practiceRoundsSinceAd = 0;
-  static const _interstitialEveryNRounds = 3;
+  // Frequency cap for Journey interstitials.
+  int _journeyLevelsSinceAd = 0;
+  static const _interstitialEveryNLevels = 3;
+
+  /// True when the user owns the Remove Ads IAP. Suppresses interstitials and
+  /// banners (rewarded boosters remain opt-in). Set from the persisted
+  /// entitlement at startup and after a purchase/restore.
+  bool removeAds = false;
 
   String get _rewardedUnitId {
     if (_realRewarded.isNotEmpty) return _realRewarded;
@@ -63,6 +77,7 @@ class AdsService {
   /// Shows a rewarded ad. Calls [onReward] only if the user earned the reward.
   /// If no ad is ready, [onReward] is called anyway so the feature still works
   /// in development — tighten this to require a real view before launch.
+  @override
   Future<void> showRewarded({required void Function() onReward}) async {
     final ad = _rewarded;
     if (ad == null) {
@@ -85,7 +100,7 @@ class AdsService {
     ad.show(onUserEarnedReward: (_, __) => onReward());
   }
 
-  // --- Interstitial (Practice mode only) -----------------------------------
+  // --- Interstitial (Journey mode only) ------------------------------------
 
   void _loadInterstitial() {
     InterstitialAd.load(
@@ -98,17 +113,35 @@ class AdsService {
     );
   }
 
-  /// Call at the end of a PRACTICE round. Shows an interstitial only every N
-  /// rounds. Do NOT call this in Daily mode.
-  void maybeShowPracticeInterstitial() {
-    _practiceRoundsSinceAd++;
-    if (_practiceRoundsSinceAd < _interstitialEveryNRounds) return;
+  /// Pure cadence + entitlement decision: returns true when an interstitial is
+  /// due now, advancing/resetting the level counter as a side effect. Kept
+  /// separate from [maybeShowJourneyInterstitial] so the gating is unit-testable
+  /// without the AdMob plugin.
+  bool shouldShowJourneyInterstitial() {
+    if (removeAds) return false;
+    _journeyLevelsSinceAd++;
+    if (_journeyLevelsSinceAd < _interstitialEveryNLevels) return false;
+    _journeyLevelsSinceAd = 0;
+    return true;
+  }
+
+  /// Test seam: reset the cadence counter and entitlement to a known state.
+  @visibleForTesting
+  void debugResetCadence() {
+    _journeyLevelsSinceAd = 0;
+    removeAds = false;
+  }
+
+  /// Call at the end of a JOURNEY level. Shows an interstitial only every N
+  /// levels, and never when Remove Ads is owned. Do NOT call this in Daily mode.
+  @override
+  void maybeShowJourneyInterstitial() {
+    if (!shouldShowJourneyInterstitial()) return;
     final ad = _interstitial;
     if (ad == null) {
       _loadInterstitial();
       return;
     }
-    _practiceRoundsSinceAd = 0;
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();

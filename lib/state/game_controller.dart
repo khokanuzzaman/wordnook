@@ -9,21 +9,21 @@ import '../models/letter_status.dart';
 import '../services/ads_service.dart';
 import '../services/storage_service.dart';
 
-enum GameMode { daily, practice }
+enum GameMode { daily, journey }
 
 /// Holds all game state. UI listens via ListenableBuilder. No widgets here.
 class GameController extends ChangeNotifier {
   GameController({
     required WordRepository words,
     required StorageService storage,
-    AdsService? ads,
+    GameAds? ads,
   })  : _words = words,
         _storage = storage,
         _ads = ads ?? AdsService.instance;
 
   final WordRepository _words;
   final StorageService _storage;
-  final AdsService _ads;
+  final GameAds _ads;
 
   /// Exposed for the settings screen (reminder prefs, onboarding flag).
   StorageService get storage => _storage;
@@ -33,6 +33,21 @@ class GameController extends ChangeNotifier {
 
   GameMode _mode = GameMode.daily;
   GameMode get mode => _mode;
+
+  int _journeyLevel = 1;
+  int get journeyLevel => _journeyLevel;
+
+  /// Social-proof stat for the current Journey level.
+  int get journeySolvedPercent => solvedPercentForLevel(_journeyLevel);
+
+  /// PLACEHOLDER social proof: a stable pseudo-random percentage (55–95)
+  /// seeded by the level number, so every player sees the same number for a
+  /// given level. Swap for a real server-backed "% solved" metric later.
+  static int solvedPercentForLevel(int level) {
+    var h = level * 2654435761;
+    h ^= h >> 13;
+    return 55 + (h.abs() % 41); // 55..95 inclusive
+  }
 
   String _answer = '';
   final List<String> _guesses = [];
@@ -83,7 +98,8 @@ class GameController extends ChangeNotifier {
         _won = saved.isNotEmpty && saved.last == _answer;
       }
     } else {
-      _answer = _words.randomWord();
+      _journeyLevel = _storage.journeyLevel;
+      _answer = _words.wordForLevel(_journeyLevel);
     }
     notifyListeners();
   }
@@ -137,8 +153,11 @@ class GameController extends ChangeNotifier {
           guessesUsed: _won ? _guesses.length : null,
         );
       }
-    } else if (_gameOver) {
-      _ads.maybeShowPracticeInterstitial();
+    } else if (_gameOver && _won) {
+      // Journey: a solved level counts as completed — advance and (maybe) ad.
+      _journeyLevel += 1;
+      await _storage.setJourneyLevel(_journeyLevel);
+      _ads.maybeShowJourneyInterstitial();
     }
 
     notifyListeners();

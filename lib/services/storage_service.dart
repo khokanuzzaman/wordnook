@@ -17,6 +17,8 @@ class StorageService {
   static const _kReminderHour = 'reminder_hour'; // int 0..23
   static const _kReminderMinute = 'reminder_minute'; // int 0..59
   static const _kOnboardingSeen = 'onboarding_seen'; // bool
+  static const _kJourneyLevel = 'journey_level'; // int, 1-based current level
+  static const _kRemoveAds = 'remove_ads'; // bool entitlement
 
   late final SharedPreferences _prefs;
 
@@ -153,6 +155,18 @@ class StorageService {
 
   bool get onboardingSeen => _prefs.getBool(_kOnboardingSeen) ?? false;
   Future<void> setOnboardingSeen() => _prefs.setBool(_kOnboardingSeen, true);
+
+  // --- Journey progression -------------------------------------------------
+
+  /// Current 1-based Journey level (defaults to level 1).
+  int get journeyLevel => _prefs.getInt(_kJourneyLevel) ?? 1;
+  Future<void> setJourneyLevel(int level) =>
+      _prefs.setInt(_kJourneyLevel, level < 1 ? 1 : level);
+
+  // --- Ads entitlement -----------------------------------------------------
+
+  bool get removeAds => _prefs.getBool(_kRemoveAds) ?? false;
+  Future<void> setRemoveAds(bool value) => _prefs.setBool(_kRemoveAds, value);
 
   // --- helpers -------------------------------------------------------------
 

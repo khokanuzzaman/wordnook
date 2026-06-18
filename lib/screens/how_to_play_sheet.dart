@@ -60,7 +60,7 @@ class HowToPlaySheet extends StatelessWidget {
             const SizedBox(height: 24),
             const Text(
               'A new Daily puzzle drops every day — keep your streak alive. '
-              'Practice mode gives you unlimited rounds any time.',
+              'Journey mode is an endless run of themed levels to play any time.',
               style: TextStyle(height: 1.4, color: Colors.white70),
             ),
             const SizedBox(height: 24),

@@ -22,7 +22,7 @@ class ShareFormatter {
     }
   }
 
-  /// [dayNumber] is the 1-based daily puzzle number, or null for Practice mode.
+  /// [dayNumber] is the 1-based daily puzzle number, or null for Journey mode.
   /// [won] with the guess count produces an "X/6" score line.
   static String build({
     required String appName,
@@ -32,7 +32,7 @@ class ShareFormatter {
     required bool won,
     required int maxGuesses,
   }) {
-    final label = dayNumber != null ? '#$dayNumber' : 'Practice';
+    final label = dayNumber != null ? '#$dayNumber' : 'Journey';
     final score = won ? '${guesses.length}/$maxGuesses' : 'X/$maxGuesses';
 
     final rows = guesses.map((g) {

@@ -62,7 +62,7 @@ void main() {
       expect(text, startsWith('X #7 X/6'));
     });
 
-    test('practice mode omits the day number', () {
+    test('journey mode omits the day number', () {
       final text = ShareFormatter.build(
         appName: 'X',
         dayNumber: null,
@@ -71,7 +71,7 @@ void main() {
         won: true,
         maxGuesses: 6,
       );
-      expect(text, startsWith('X Practice 1/6'));
+      expect(text, startsWith('X Journey 1/6'));
     });
   });
 }
