@@ -3,6 +3,7 @@ import 'package:share_plus/share_plus.dart';
 import '../models/game_result.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
+import 'widgets/banner_ad_slot.dart';
 
 class StatsSheet extends StatelessWidget {
   final GameController controller;
@@ -77,6 +78,8 @@ class StatsSheet extends StatelessWidget {
                 icon: const Icon(Icons.share),
                 label: const Text('Share result'),
               ),
+              const SizedBox(height: 12),
+              const BannerAdSlot(),
             ],
           ),
         );

@@ -26,10 +26,13 @@ class AdsService implements GameAds {
   static const _testRewardedIos = 'ca-app-pub-3940256099942544/1712485313';
   static const _testInterstitialAndroid = 'ca-app-pub-3940256099942544/1033173712';
   static const _testInterstitialIos = 'ca-app-pub-3940256099942544/4411468910';
+  static const _testBannerAndroid = 'ca-app-pub-3940256099942544/6300978111';
+  static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
 
   // Real IDs come from --dart-define=ADMOB_REWARDED=... etc. Empty => use test.
   static const _realRewarded = String.fromEnvironment('ADMOB_REWARDED');
   static const _realInterstitial = String.fromEnvironment('ADMOB_INTERSTITIAL');
+  static const _realBanner = String.fromEnvironment('ADMOB_BANNER');
 
   RewardedAd? _rewarded;
   InterstitialAd? _interstitial;
@@ -51,6 +54,11 @@ class AdsService implements GameAds {
   String get _interstitialUnitId {
     if (_realInterstitial.isNotEmpty) return _realInterstitial;
     return Platform.isIOS ? _testInterstitialIos : _testInterstitialAndroid;
+  }
+
+  String get bannerUnitId {
+    if (_realBanner.isNotEmpty) return _realBanner;
+    return Platform.isIOS ? _testBannerIos : _testBannerAndroid;
   }
 
   Future<void> init() async {
