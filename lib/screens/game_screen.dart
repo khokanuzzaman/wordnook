@@ -96,15 +96,21 @@ class _GameScreenState extends State<GameScreen> {
     );
   }
 
-  void _restartJourney() {
+  void _nextJourneyLevel() {
     _endShown = false;
     c.startGame(GameMode.journey);
+  }
+
+  void _retryJourneyLevel() {
+    _endShown = false;
+    c.retryJourneyLevel();
   }
 
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      listenable: c,
+      // Rebuild on game state AND on the high-contrast palette toggle.
+      listenable: Listenable.merge([c, AppPalette.highContrast]),
       builder: (context, _) {
         final isJourney = c.mode == GameMode.journey;
         return Scaffold(
@@ -163,7 +169,8 @@ class _GameScreenState extends State<GameScreen> {
                 Expanded(child: BoardGrid(controller: c)),
                 _EndActions(
                   controller: c,
-                  onNextOrRetry: _restartJourney,
+                  onNextLevel: _nextJourneyLevel,
+                  onRetry: _retryJourneyLevel,
                   onExtraGuess: c.useExtraGuess,
                 ),
                 Keyboard(controller: c),
@@ -205,11 +212,13 @@ class _JourneyBanner extends StatelessWidget {
 /// Bottom-of-board actions for end states (Journey next/retry, extra guess).
 class _EndActions extends StatelessWidget {
   final GameController controller;
-  final VoidCallback onNextOrRetry;
+  final VoidCallback onNextLevel;
+  final VoidCallback onRetry;
   final VoidCallback onExtraGuess;
   const _EndActions({
     required this.controller,
-    required this.onNextOrRetry,
+    required this.onNextLevel,
+    required this.onRetry,
     required this.onExtraGuess,
   });
 
@@ -232,7 +241,7 @@ class _EndActions extends StatelessWidget {
     if (c.mode == GameMode.journey) {
       buttons.add(
         FilledButton(
-          onPressed: onNextOrRetry,
+          onPressed: c.won ? onNextLevel : onRetry,
           child: Text(c.won ? 'Next level' : 'Try again'),
         ),
       );

@@ -45,4 +45,47 @@ class GameEngine {
   /// Returns true if every position is correct.
   static bool isWinning(List<LetterStatus> statuses) =>
       statuses.every((s) => s == LetterStatus.correct);
+
+  /// Hard-mode check: every hint revealed by [previousGuesses] must be reused in
+  /// [guess]. Returns a human-readable reason if the guess violates the rule, or
+  /// null if it's acceptable. Pure (no UI), so it can be unit-tested.
+  ///
+  /// Rules (standard "hard mode"):
+  ///  - a letter found in the correct spot must stay in that spot;
+  ///  - a letter known to be present must appear somewhere in the guess.
+  static String? hardModeViolation(
+    String guess,
+    List<String> previousGuesses,
+    String answer,
+  ) {
+    for (final prev in previousGuesses) {
+      final statuses = evaluateGuess(prev, answer);
+      // Correct letters must be kept in place.
+      for (var i = 0; i < prev.length; i++) {
+        if (statuses[i] == LetterStatus.correct && guess[i] != prev[i]) {
+          return '${_ordinal(i + 1)} letter must be ${prev[i]}';
+        }
+      }
+      // Present letters must be included somewhere.
+      for (var i = 0; i < prev.length; i++) {
+        if (statuses[i] == LetterStatus.present && !guess.contains(prev[i])) {
+          return 'Guess must contain ${prev[i]}';
+        }
+      }
+    }
+    return null;
+  }
+
+  static String _ordinal(int n) {
+    switch (n) {
+      case 1:
+        return '1st';
+      case 2:
+        return '2nd';
+      case 3:
+        return '3rd';
+      default:
+        return '${n}th';
+    }
+  }
 }

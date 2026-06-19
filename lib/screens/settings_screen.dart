@@ -4,6 +4,7 @@ import '../branding.dart';
 import '../services/iap_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
+import '../theme/app_theme.dart';
 import 'how_to_play_sheet.dart';
 
 /// Settings: daily-reminder toggle + time, how-to-play, and about info.
@@ -21,6 +22,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
   late bool _reminderEnabled = _storage.reminderEnabled;
   late TimeOfDay _reminderTime =
       TimeOfDay(hour: _storage.reminderHour, minute: _storage.reminderMinute);
+  late bool _hardMode = _storage.hardMode;
+  late bool _highContrast = _storage.highContrast;
+
+  Future<void> _onToggleHardMode(bool value) async {
+    setState(() => _hardMode = value);
+    await _storage.setHardMode(value);
+  }
+
+  Future<void> _onToggleHighContrast(bool value) async {
+    setState(() => _highContrast = value);
+    await _storage.setHighContrast(value);
+    AppPalette.highContrast.value = value; // repaints the board live
+  }
 
   Future<void> _onToggleReminder(bool value) async {
     setState(() => _reminderEnabled = value);
@@ -63,6 +77,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
       appBar: AppBar(title: const Text('Settings')),
       body: ListView(
         children: [
+          const _SectionHeader('Game'),
+          SwitchListTile(
+            secondary: const Icon(Icons.fitness_center),
+            title: const Text('Hard mode'),
+            subtitle: const Text('Revealed hints must be used in later guesses.'),
+            value: _hardMode,
+            onChanged: _onToggleHardMode,
+          ),
+          SwitchListTile(
+            secondary: const Icon(Icons.contrast),
+            title: const Text('High-contrast colours'),
+            subtitle: const Text('Colour-blind-friendly blue / orange tiles.'),
+            value: _highContrast,
+            onChanged: _onToggleHighContrast,
+          ),
+          const Divider(),
+          const _SectionHeader('Reminders'),
           SwitchListTile(
             title: const Text('Daily reminder'),
             subtitle: const Text("A once-a-day nudge that the new puzzle is up."),
@@ -91,6 +122,28 @@ class _SettingsScreenState extends State<SettingsScreen> {
             icon: Icon(Icons.info_outline),
           ),
         ],
+      ),
+    );
+  }
+}
+
+/// Small section label for grouping settings.
+class _SectionHeader extends StatelessWidget {
+  final String title;
+  const _SectionHeader(this.title);
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+      child: Text(
+        title.toUpperCase(),
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.bold,
+          letterSpacing: 0.8,
+          color: AppPalette.correct,
+        ),
       ),
     );
   }

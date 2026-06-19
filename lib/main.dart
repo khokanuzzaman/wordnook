@@ -8,12 +8,16 @@ import 'services/iap_service.dart';
 import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 import 'state/game_controller.dart';
+import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final storage = StorageService();
   await storage.init();
+
+  // Apply the saved accessibility preference before the first frame.
+  AppPalette.highContrast.value = storage.highContrast;
 
   final words = WordRepository();
   await words.load();

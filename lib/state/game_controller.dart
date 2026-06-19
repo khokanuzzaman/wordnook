@@ -37,6 +37,12 @@ class GameController extends ChangeNotifier {
   int _journeyLevel = 1;
   int get journeyLevel => _journeyLevel;
 
+  // Within-session retry counter for the current Journey level. Each retry
+  // after a loss shows a different word (but the level number is unchanged).
+  int _journeyAttempt = 0;
+  String _journeyWord() =>
+      _words.wordForLevel(_journeyLevel + _journeyAttempt * 7919);
+
   /// Social-proof stat for the current Journey level.
   int get journeySolvedPercent => solvedPercentForLevel(_journeyLevel);
 
@@ -99,8 +105,25 @@ class GameController extends ChangeNotifier {
       }
     } else {
       _journeyLevel = _storage.journeyLevel;
-      _answer = _words.wordForLevel(_journeyLevel);
+      _journeyAttempt = 0; // fresh entry to a level starts at its canonical word
+      _answer = _journeyWord();
     }
+    notifyListeners();
+  }
+
+  /// Retries the current Journey level after a loss with a DIFFERENT word, so
+  /// players don't just re-enter the word they already learned. The level
+  /// number (and its "% solved" stat) stays the same.
+  void retryJourneyLevel() {
+    if (_mode != GameMode.journey) return;
+    _journeyAttempt += 1;
+    _guesses.clear();
+    _current = '';
+    _gameOver = false;
+    _won = false;
+    _message = null;
+    _keyStatus.clear();
+    _answer = _journeyWord();
     notifyListeners();
   }
 
@@ -129,6 +152,14 @@ class GameController extends ChangeNotifier {
     if (!_words.isAllowed(_current)) {
       _flash('Not in word list');
       return;
+    }
+    if (_storage.hardMode && _guesses.isNotEmpty) {
+      final violation =
+          GameEngine.hardModeViolation(_current, _guesses, _answer);
+      if (violation != null) {
+        _flash('Hard mode: $violation');
+        return;
+      }
     }
 
     _applyToKeyboard(_current);
