@@ -183,6 +183,13 @@ class GameController extends ChangeNotifier {
           won: _won,
           guessesUsed: _won ? _guesses.length : null,
         );
+        // Celebrate the streak once it's worth bragging about.
+        if (_won && _stats.currentStreak >= 2) {
+          final milestone = _isStreakMilestone(_stats.currentStreak);
+          _message = '${_winMessage(_guesses.length)}  '
+              '${milestone ? '🔥🔥' : '🔥'} ${_stats.currentStreak}-day streak'
+              '${milestone ? '!' : ''}';
+        }
       }
     } else if (_gameOver && _won) {
       // Journey: a solved level counts as completed — advance and (maybe) ad.
@@ -264,6 +271,15 @@ class GameController extends ChangeNotifier {
       }
     }
   }
+
+  /// Milestone streaks get extra fanfare.
+  static bool _isStreakMilestone(int streak) =>
+      streak == 5 ||
+      streak == 10 ||
+      streak == 25 ||
+      streak == 50 ||
+      streak == 100 ||
+      (streak > 0 && streak % 100 == 0);
 
   /// Praise scaled to how few guesses it took.
   String _winMessage(int guesses) {

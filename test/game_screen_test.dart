@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:daily_word_game/data/word_repository.dart';
 import 'package:daily_word_game/screens/game_screen.dart';
+import 'package:daily_word_game/screens/widgets/celebration_overlay.dart';
 import 'package:daily_word_game/services/ads_service.dart';
 import 'package:daily_word_game/services/storage_service.dart';
 import 'package:daily_word_game/state/game_controller.dart';
@@ -54,5 +55,42 @@ void main() {
 
     expect(find.text('Statistics'), findsOneWidget);
     expect(find.text('Guess distribution'), findsOneWidget);
+  });
+
+  testWidgets('winning the daily shows the celebration overlay',
+      (tester) async {
+    tester.view.physicalSize = const Size(1170, 3000);
+    tester.view.devicePixelRatio = 3.0;
+    addTearDown(tester.view.resetPhysicalSize);
+    addTearDown(tester.view.resetDevicePixelRatio);
+
+    SharedPreferences.setMockInitialValues({});
+    final storage = StorageService();
+    await storage.init();
+    await storage.setOnboardingSeen();
+    AdsService.instance.removeAds = true;
+
+    final words = WordRepository()
+      ..debugLoad(['CRANE', 'SLATE', 'BRINE', 'PLUMP', 'GHOST']);
+    final controller =
+        GameController(words: words, storage: storage, ads: _FakeAds());
+
+    await tester.pumpWidget(MaterialApp(home: GameScreen(controller: controller)));
+    await tester.pump();
+
+    // Solve today's word in one guess.
+    for (final ch in controller.answer.split('')) {
+      controller.onKey(ch);
+    }
+    controller.onKey('ENTER');
+    await tester.pump(); // flush async submit + notifyListeners
+    await tester.pump(const Duration(milliseconds: 16)); // post-frame handler
+    await tester.pump(const Duration(milliseconds: 16)); // rebuild with overlay
+
+    expect(controller.won, isTrue);
+    expect(find.byType(CelebrationOverlay), findsOneWidget);
+
+    // Drain the confetti + stats-sheet timers so the test ends cleanly.
+    await tester.pumpAndSettle();
   });
 }

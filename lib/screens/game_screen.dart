@@ -7,6 +7,7 @@ import 'how_to_play_sheet.dart';
 import 'settings_screen.dart';
 import 'stats_sheet.dart';
 import 'widgets/board_grid.dart';
+import 'widgets/celebration_overlay.dart';
 import 'widgets/keyboard.dart';
 
 class GameScreen extends StatefulWidget {
@@ -73,11 +74,13 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   bool _endShown = false;
+  bool _celebrate = false;
   void _handleGameOver() {
     if (_endShown) return;
     _endShown = true;
     if (c.won) {
       HapticFeedback.mediumImpact();
+      if (mounted) setState(() => _celebrate = true);
     } else {
       HapticFeedback.heavyImpact();
     }
@@ -113,71 +116,84 @@ class _GameScreenState extends State<GameScreen> {
       listenable: Listenable.merge([c, AppPalette.highContrast]),
       builder: (context, _) {
         final isJourney = c.mode == GameMode.journey;
-        return Scaffold(
-          appBar: AppBar(
-            title: Text(
-              isJourney
-                  ? 'Journey · Level ${c.journeyLevel}'
-                  : Branding.appName,
-            ),
-            actions: [
-              TextButton(
-                onPressed: _toggleMode,
-                child: Text(
-                  isJourney ? 'Journey' : 'Daily',
-                  style: const TextStyle(
-                    color: AppPalette.correct,
-                    fontWeight: FontWeight.bold,
-                  ),
+        return Stack(
+          children: [
+            Scaffold(
+              appBar: AppBar(
+                title: Text(
+                  isJourney
+                      ? 'Journey · Level ${c.journeyLevel}'
+                      : Branding.appName,
                 ),
-              ),
-              IconButton(
-                tooltip: 'Hint (watch ad)',
-                onPressed: c.gameOver ? null : c.useHint,
-                icon: const Icon(Icons.lightbulb_outline),
-              ),
-              IconButton(
-                tooltip: 'Stats',
-                onPressed: () => StatsSheet.show(context, c),
-                icon: const Icon(Icons.bar_chart),
-              ),
-              PopupMenuButton<String>(
-                onSelected: (value) {
-                  switch (value) {
-                    case 'how':
-                      HowToPlaySheet.show(context);
-                    case 'settings':
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => SettingsScreen(storage: c.storage),
-                        ),
-                      );
-                  }
-                },
-                itemBuilder: (context) => const [
-                  PopupMenuItem(value: 'how', child: Text('How to play')),
-                  PopupMenuItem(value: 'settings', child: Text('Settings')),
+                actions: [
+                  TextButton(
+                    onPressed: _toggleMode,
+                    child: Text(
+                      isJourney ? 'Journey' : 'Daily',
+                      style: const TextStyle(
+                        color: AppPalette.correct,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Hint (watch ad)',
+                    onPressed: c.gameOver ? null : c.useHint,
+                    icon: const Icon(Icons.lightbulb_outline),
+                  ),
+                  IconButton(
+                    tooltip: 'Stats',
+                    onPressed: () => StatsSheet.show(context, c),
+                    icon: const Icon(Icons.bar_chart),
+                  ),
+                  PopupMenuButton<String>(
+                    onSelected: (value) {
+                      switch (value) {
+                        case 'how':
+                          HowToPlaySheet.show(context);
+                        case 'settings':
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) =>
+                                  SettingsScreen(storage: c.storage),
+                            ),
+                          );
+                      }
+                    },
+                    itemBuilder: (context) => const [
+                      PopupMenuItem(value: 'how', child: Text('How to play')),
+                      PopupMenuItem(value: 'settings', child: Text('Settings')),
+                    ],
+                  ),
                 ],
               ),
-            ],
-          ),
-          body: SafeArea(
-            child: Column(
-              children: [
-                if (isJourney) _JourneyBanner(controller: c),
-                const SizedBox(height: 8),
-                Expanded(child: BoardGrid(controller: c)),
-                _EndActions(
-                  controller: c,
-                  onNextLevel: _nextJourneyLevel,
-                  onRetry: _retryJourneyLevel,
-                  onExtraGuess: c.useExtraGuess,
+              body: SafeArea(
+                child: Column(
+                  children: [
+                    if (isJourney) _JourneyBanner(controller: c),
+                    const SizedBox(height: 8),
+                    Expanded(child: BoardGrid(controller: c)),
+                    _EndActions(
+                      controller: c,
+                      onNextLevel: _nextJourneyLevel,
+                      onRetry: _retryJourneyLevel,
+                      onExtraGuess: c.useExtraGuess,
+                    ),
+                    Keyboard(controller: c),
+                    const SizedBox(height: 8),
+                  ],
                 ),
-                Keyboard(controller: c),
-                const SizedBox(height: 8),
-              ],
+              ),
             ),
-          ),
+            if (_celebrate)
+              Positioned.fill(
+                child: CelebrationOverlay(
+                  onDone: () {
+                    if (mounted) setState(() => _celebrate = false);
+                  },
+                ),
+              ),
+          ],
         );
       },
     );
@@ -250,7 +266,8 @@ class _EndActions extends StatelessWidget {
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 4),
-      child: Wrap(spacing: 12, alignment: WrapAlignment.center, children: buttons),
+      child:
+          Wrap(spacing: 12, alignment: WrapAlignment.center, children: buttons),
     );
   }
 }
