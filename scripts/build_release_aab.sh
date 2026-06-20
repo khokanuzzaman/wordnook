@@ -11,14 +11,15 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 PROPS="android/admob.properties"
-REWARDED=""; INTERSTITIAL=""; BANNER=""
-if [[ -f "$PROPS" ]]; then
-  # shellcheck disable=SC1090
-  source <(grep -E '^(ADMOB_REWARDED|ADMOB_INTERSTITIAL|ADMOB_BANNER)=' "$PROPS")
-  REWARDED="${ADMOB_REWARDED:-}"
-  INTERSTITIAL="${ADMOB_INTERSTITIAL:-}"
-  BANNER="${ADMOB_BANNER:-}"
-else
+# Read a single key from the properties file (everything after the first '=').
+# Avoids `source <(...)`, which fails silently under set -euo pipefail on macOS bash.
+prop() { [ -f "$PROPS" ] && grep -E "^$1=" "$PROPS" | head -1 | cut -d= -f2- || true; }
+
+REWARDED="$(prop ADMOB_REWARDED)"
+INTERSTITIAL="$(prop ADMOB_INTERSTITIAL)"
+BANNER="$(prop ADMOB_BANNER)"
+
+if [[ ! -f "$PROPS" ]]; then
   echo "WARNING: $PROPS not found — building with TEST ad unit ids." >&2
 fi
 
