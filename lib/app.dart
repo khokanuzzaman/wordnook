@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'branding.dart';
 import 'screens/game_screen.dart';
 import 'state/game_controller.dart';
 import 'theme/app_theme.dart';
@@ -10,8 +11,7 @@ class WordGameApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
-      // TODO: your own brand name (NOT "Wordle").
-      title: 'Daily Word',
+      title: Branding.appName,
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       home: GameScreen(controller: controller),
