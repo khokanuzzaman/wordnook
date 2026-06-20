@@ -18,6 +18,7 @@ prop() { [ -f "$PROPS" ] && grep -E "^$1=" "$PROPS" | head -1 | cut -d= -f2- || 
 REWARDED="$(prop ADMOB_REWARDED)"
 INTERSTITIAL="$(prop ADMOB_INTERSTITIAL)"
 BANNER="$(prop ADMOB_BANNER)"
+TEST_DEVICES="$(prop ADMOB_TEST_DEVICE_IDS)"
 
 if [[ ! -f "$PROPS" ]]; then
   echo "WARNING: $PROPS not found — building with TEST ad unit ids." >&2
@@ -26,7 +27,8 @@ fi
 flutter build appbundle --release \
   --dart-define=ADMOB_REWARDED="$REWARDED" \
   --dart-define=ADMOB_INTERSTITIAL="$INTERSTITIAL" \
-  --dart-define=ADMOB_BANNER="$BANNER"
+  --dart-define=ADMOB_BANNER="$BANNER" \
+  --dart-define=ADMOB_TEST_DEVICE_IDS="$TEST_DEVICES"
 
 echo
 echo "Done → build/app/outputs/bundle/release/app-release.aab"

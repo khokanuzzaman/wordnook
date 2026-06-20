@@ -34,6 +34,11 @@ class AdsService implements GameAds {
   static const _realInterstitial = String.fromEnvironment('ADMOB_INTERSTITIAL');
   static const _realBanner = String.fromEnvironment('ADMOB_BANNER');
 
+  // Comma-separated device ids that should always receive TEST ads (even on
+  // real ad units), so you can safely test on your own device without risking
+  // an AdMob policy strike. From --dart-define=ADMOB_TEST_DEVICE_IDS=...
+  static const _testDeviceIds = String.fromEnvironment('ADMOB_TEST_DEVICE_IDS');
+
   RewardedAd? _rewarded;
   InterstitialAd? _interstitial;
 
@@ -62,6 +67,17 @@ class AdsService implements GameAds {
   }
 
   Future<void> init() async {
+    // Register test devices first so real ad units serve TEST ads on them.
+    final testIds = _testDeviceIds
+        .split(',')
+        .map((s) => s.trim())
+        .where((s) => s.isNotEmpty)
+        .toList();
+    if (testIds.isNotEmpty) {
+      await MobileAds.instance.updateRequestConfiguration(
+        RequestConfiguration(testDeviceIds: testIds),
+      );
+    }
     await MobileAds.instance.initialize();
     // TODO(consent): integrate the UMP consent flow before requesting ads in
     // GDPR regions, then load. eCPM in Tier-1 depends on consented signals.

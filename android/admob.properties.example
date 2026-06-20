@@ -14,3 +14,6 @@ ADMOB_APP_ID_IOS=
 ADMOB_REWARDED=
 ADMOB_INTERSTITIAL=
 ADMOB_BANNER=
+# Optional: comma-separated device ids that always get TEST ads (safe to click
+# on your own phone). Find yours in logcat: "setTestDeviceIds(Arrays.asList(...))".
+ADMOB_TEST_DEVICE_IDS=
