@@ -12,8 +12,9 @@
 	<string>$(PRODUCT_BUNDLE_IDENTIFIER)</string>
 	<key>CFBundleInfoDictionaryVersion</key>
 	<string>6.0</string>
-	<!-- AdMob app ID. Google's PUBLIC sample app ID (safe for dev).
-	     Replace with the real AdMob app ID before release. -->
+	<!-- AdMob app ID. Google's PUBLIC sample app ID (safe for dev). Before an
+	     iOS release, replace this with ADMOB_APP_ID_IOS from android/admob.properties
+	     (iOS reads it statically here; Android injects its id via Gradle). -->
 	<key>GADApplicationIdentifier</key>
 	<string>ca-app-pub-3940256099942544~1458002511</string>
 	<key>CFBundleName</key>

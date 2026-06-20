@@ -17,6 +17,17 @@ if (hasReleaseKeystore) {
     keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
+// Real AdMob App ID from android/admob.properties (gitignored — never commit
+// real ad IDs). Falls back to Google's PUBLIC sample App ID for development.
+val admobProperties = Properties()
+val admobPropertiesFile = rootProject.file("admob.properties")
+if (admobPropertiesFile.exists()) {
+    admobProperties.load(FileInputStream(admobPropertiesFile))
+}
+val admobAppId: String =
+    (admobProperties["ADMOB_APP_ID_ANDROID"] as String?)?.takeIf { it.isNotBlank() }
+        ?: "ca-app-pub-3940256099942544~3347511713" // sample app ID (dev)
+
 android {
     namespace = "com.khokan.dailyword"
     compileSdk = flutter.compileSdkVersion
@@ -41,6 +52,8 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+        // Injected into AndroidManifest as the AdMob application id.
+        manifestPlaceholders["admobAppId"] = admobAppId
     }
 
     signingConfigs {

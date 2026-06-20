@@ -35,11 +35,12 @@
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
-        <!-- AdMob app ID. This is Google's PUBLIC sample app ID (safe for dev).
-             Replace with the real AdMob app ID before release. -->
+        <!-- AdMob app ID. Injected from android/admob.properties at build time
+             (gitignored); falls back to Google's PUBLIC sample id for dev.
+             See android/app/build.gradle.kts. -->
         <meta-data
             android:name="com.google.android.gms.ads.APPLICATION_ID"
-            android:value="ca-app-pub-3940256099942544~3347511713" />
+            android:value="${admobAppId}" />
         <!-- flutter_local_notifications: deliver scheduled reminders and
              re-register them after a device reboot. -->
         <receiver

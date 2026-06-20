@@ -12,3 +12,6 @@ GeneratedPluginRegistrant.java
 key.properties
 **/*.keystore
 **/*.jks
+
+# Real AdMob ids — never commit. Use admob.properties.example as a template.
+admob.properties

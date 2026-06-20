@@ -1,0 +1,16 @@
+# AdMob real ids — COPY this file to `android/admob.properties` (gitignored) and
+# fill in the values from your AdMob console. NEVER commit the real ids.
+#
+#   cp android/admob.properties.example android/admob.properties
+#
+# App ids look like  ca-app-pub-0000000000000000~1111111111
+# Ad-unit ids look like  ca-app-pub-0000000000000000/2222222222
+#
+# Only ADMOB_APP_ID_ANDROID is read by Gradle (injected into the manifest).
+# The unit ids below are passed to the build via scripts/build_release_aab.sh.
+
+ADMOB_APP_ID_ANDROID=
+ADMOB_APP_ID_IOS=
+ADMOB_REWARDED=
+ADMOB_INTERSTITIAL=
+ADMOB_BANNER=
