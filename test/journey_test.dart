@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:daily_word_game/data/word_repository.dart';
 import 'package:daily_word_game/models/word_pack.dart';
 import 'package:daily_word_game/services/ads_service.dart';
+import 'package:daily_word_game/services/coin_service.dart';
 import 'package:daily_word_game/services/storage_service.dart';
 import 'package:daily_word_game/state/game_controller.dart';
 
@@ -36,8 +37,8 @@ void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
   group('WordPack', () {
-    const pack = WordPack(
-        id: 't', name: 'T', answers: ['CRANE', 'SLATE', 'BRINE']);
+    const pack =
+        WordPack(id: 't', name: 'T', answers: ['CRANE', 'SLATE', 'BRINE']);
 
     test('wordForLevel is 1-based and wraps', () {
       expect(pack.wordForLevel(1), 'CRANE');
@@ -53,7 +54,9 @@ void main() {
   group('ad cadence', () {
     test('interstitial is due every 3rd level', () {
       final ads = AdsService.instance..debugResetCadence();
-      final results = [for (var i = 0; i < 6; i++) ads.shouldShowJourneyInterstitial()];
+      final results = [
+        for (var i = 0; i < 6; i++) ads.shouldShowJourneyInterstitial()
+      ];
       expect(results, [false, false, true, false, false, true]);
     });
   });
@@ -72,9 +75,14 @@ void main() {
   group('level progression', () {
     test('starts at the stored level and advances on a win', () async {
       final storage = await freshStorage();
-      final words = WordRepository()..debugLoad(['CRANE', 'SLATE', 'BRINE', 'PLUMP']);
+      final words = WordRepository()
+        ..debugLoad(['CRANE', 'SLATE', 'BRINE', 'PLUMP']);
       final ads = FakeAds();
-      final c = GameController(words: words, storage: storage, ads: ads);
+      final c = GameController(
+          words: words,
+          storage: storage,
+          coins: CoinService(storage),
+          ads: ads);
 
       c.startGame(GameMode.journey);
       expect(c.journeyLevel, 1);
@@ -96,7 +104,11 @@ void main() {
     test('a loss does not advance the level', () async {
       final storage = await freshStorage();
       final words = WordRepository()..debugLoad(['CRANE', 'SLATE', 'BRINE']);
-      final c = GameController(words: words, storage: storage, ads: FakeAds());
+      final c = GameController(
+          words: words,
+          storage: storage,
+          coins: CoinService(storage),
+          ads: FakeAds());
 
       c.startGame(GameMode.journey);
       final answer = c.answer;

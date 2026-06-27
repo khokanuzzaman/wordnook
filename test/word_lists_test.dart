@@ -20,7 +20,8 @@ void main() {
     final answers = readWords(answersFile);
     expect(answers, isNotEmpty);
     for (final w in answers) {
-      expect(fiveLetters.hasMatch(w), isTrue, reason: '"$w" is not 5 letters A-Z');
+      expect(fiveLetters.hasMatch(w), isTrue,
+          reason: '"$w" is not 5 letters A-Z');
     }
   });
 
@@ -28,7 +29,8 @@ void main() {
     final allowed = readWords(allowedFile);
     expect(allowed, isNotEmpty);
     for (final w in allowed) {
-      expect(fiveLetters.hasMatch(w), isTrue, reason: '"$w" is not 5 letters A-Z');
+      expect(fiveLetters.hasMatch(w), isTrue,
+          reason: '"$w" is not 5 letters A-Z');
     }
   });
 

@@ -30,8 +30,7 @@ void main() {
         if ('EERIE'[i] == 'E') eStatuses.add(r[i]);
       }
       // Exactly one E should be marked non-absent (present, since E is last in ABIDE).
-      final nonAbsent =
-          eStatuses.where((s) => s != LetterStatus.absent).length;
+      final nonAbsent = eStatuses.where((s) => s != LetterStatus.absent).length;
       expect(nonAbsent, 1);
     });
 

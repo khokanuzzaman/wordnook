@@ -51,9 +51,7 @@ class _LetterTileState extends State<LetterTile>
   void didUpdateWidget(covariant LetterTile old) {
     super.didUpdateWidget(old);
     // A letter typed into an empty tile gives a quick pop.
-    if (!_revealed &&
-        widget.letter.isNotEmpty &&
-        old.letter != widget.letter) {
+    if (!_revealed && widget.letter.isNotEmpty && old.letter != widget.letter) {
       _controller
         ..value = 0
         ..forward();
@@ -87,8 +85,9 @@ class _LetterTileState extends State<LetterTile>
           );
         }
         // Typing pop: subtle scale from a keystroke.
-        final scale =
-            isEmpty && widget.letter.isNotEmpty ? 0.9 + 0.1 * _controller.value : 1.0;
+        final scale = isEmpty && widget.letter.isNotEmpty
+            ? 0.9 + 0.1 * _controller.value
+            : 1.0;
         return Transform.scale(scale: scale, child: child);
       },
       child: Container(

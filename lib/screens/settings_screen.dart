@@ -43,7 +43,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
       if (!granted && mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('Enable notifications in system settings to get reminders.'),
+            content: Text(
+                'Enable notifications in system settings to get reminders.'),
           ),
         );
       }
@@ -80,7 +81,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           SwitchListTile(
             secondary: const Icon(Icons.fitness_center),
             title: const Text('Hard mode'),
-            subtitle: const Text('Revealed hints must be used in later guesses.'),
+            subtitle:
+                const Text('Revealed hints must be used in later guesses.'),
             value: _hardMode,
             onChanged: _onToggleHardMode,
           ),
@@ -95,7 +97,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
           const _SectionHeader('Reminders'),
           SwitchListTile(
             title: const Text('Daily reminder'),
-            subtitle: const Text("A once-a-day nudge that the new puzzle is up."),
+            subtitle:
+                const Text("A once-a-day nudge that the new puzzle is up."),
             value: _reminderEnabled,
             onChanged: _onToggleReminder,
           ),

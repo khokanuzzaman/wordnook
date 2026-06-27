@@ -2,11 +2,13 @@ import 'package:flutter/foundation.dart';
 
 import '../branding.dart';
 import '../data/word_repository.dart';
+import '../logic/coin_rules.dart';
 import '../logic/game_engine.dart';
 import '../logic/share_formatter.dart';
 import '../models/game_result.dart';
 import '../models/letter_status.dart';
 import '../services/ads_service.dart';
+import '../services/coin_service.dart';
 import '../services/storage_service.dart';
 
 enum GameMode { daily, journey }
@@ -16,17 +18,24 @@ class GameController extends ChangeNotifier {
   GameController({
     required WordRepository words,
     required StorageService storage,
+    required CoinService coins,
     GameAds? ads,
   })  : _words = words,
         _storage = storage,
+        _coins = coins,
         _ads = ads ?? AdsService.instance;
 
   final WordRepository _words;
   final StorageService _storage;
+  final CoinService _coins;
   final GameAds _ads;
 
   /// Exposed for the settings screen (reminder prefs, onboarding flag).
   StorageService get storage => _storage;
+
+  /// Current coin balance + a listenable so the app bar repaints on change.
+  int get coins => _coins.coins;
+  Listenable get coinsListenable => _coins;
 
   static const int maxGuesses = 6;
   int get wordLength => WordRepository.wordLength;
@@ -105,7 +114,8 @@ class GameController extends ChangeNotifier {
       }
     } else {
       _journeyLevel = _storage.journeyLevel;
-      _journeyAttempt = 0; // fresh entry to a level starts at its canonical word
+      _journeyAttempt =
+          0; // fresh entry to a level starts at its canonical word
       _answer = _journeyWord();
     }
     notifyListeners();
@@ -183,18 +193,29 @@ class GameController extends ChangeNotifier {
           won: _won,
           guessesUsed: _won ? _guesses.length : null,
         );
-        // Celebrate the streak once it's worth bragging about.
-        if (_won && _stats.currentStreak >= 2) {
-          final milestone = _isStreakMilestone(_stats.currentStreak);
-          _message = '${_winMessage(_guesses.length)}  '
-              '${milestone ? '🔥🔥' : '🔥'} ${_stats.currentStreak}-day streak'
-              '${milestone ? '!' : ''}';
+        if (_won) {
+          await _coins.award(CoinRules.dailyWinReward(
+            guessesUsed: _guesses.length,
+            maxGuesses: maxGuesses,
+            streak: _stats.currentStreak,
+          ));
+          // Celebrate the streak once it's worth bragging about.
+          if (_stats.currentStreak >= 2) {
+            final milestone = CoinRules.isStreakMilestone(_stats.currentStreak);
+            _message = '${_winMessage(_guesses.length)}  '
+                '${milestone ? '🔥🔥' : '🔥'} ${_stats.currentStreak}-day streak'
+                '${milestone ? '!' : ''}';
+          }
         }
       }
     } else if (_gameOver && _won) {
-      // Journey: a solved level counts as completed — advance and (maybe) ad.
+      // Journey: a solved level counts as completed — advance, reward, (maybe) ad.
       _journeyLevel += 1;
       await _storage.setJourneyLevel(_journeyLevel);
+      await _coins.award(CoinRules.journeyLevelReward(
+        guessesUsed: _guesses.length,
+        maxGuesses: maxGuesses,
+      ));
       _ads.maybeShowJourneyInterstitial();
     }
 
@@ -203,12 +224,12 @@ class GameController extends ChangeNotifier {
 
   // --- Rewarded features ---------------------------------------------------
 
-  /// Reveals one not-yet-solved position. Gated behind a rewarded ad (only
-  /// grants on a real view).
+  /// Reveals one not-yet-solved position. Costs coins; if the player can't
+  /// afford it, they're nudged to the watch-to-earn action.
   Future<void> useHint() async {
     if (_gameOver) return;
-    if (!await _ads.showRewarded()) {
-      _flash('No ad available — try again in a moment');
+    if (!await _coins.trySpend(CoinRules.hintCost)) {
+      _flash('Need ${CoinRules.hintCost} coins — tap the coin to watch & earn');
       return;
     }
     _revealHint();
@@ -216,7 +237,8 @@ class GameController extends ChangeNotifier {
 
   void _revealHint() {
     for (var i = 0; i < wordLength; i++) {
-      final solvedHere = _guesses.any((g) => g.length > i && g[i] == _answer[i]);
+      final solvedHere =
+          _guesses.any((g) => g.length > i && g[i] == _answer[i]);
       if (!solvedHere) {
         _flash('Hint: position ${i + 1} is "${_answer[i]}"');
         return;
@@ -225,17 +247,27 @@ class GameController extends ChangeNotifier {
     _flash("You're very close!");
   }
 
-  /// Grants one extra guess beyond the normal max. Gated behind a rewarded ad
-  /// (only grants on a real view).
+  /// Grants one extra guess beyond the normal max. Costs coins.
   Future<void> useExtraGuess() async {
     if (!_gameOver || _won) return;
-    if (!await _ads.showRewarded()) {
-      _flash('No ad available — try again in a moment');
+    if (!await _coins.trySpend(CoinRules.extraGuessCost)) {
+      _flash(
+          'Need ${CoinRules.extraGuessCost} coins — tap the coin to watch & earn');
       return;
     }
     _gameOver = false;
     _flash('Extra guess granted');
     notifyListeners();
+  }
+
+  /// Opt-in "watch ad → earn coins". Only awards on a real, earned view.
+  Future<void> watchAdForCoins() async {
+    if (!await _ads.showRewarded()) {
+      _flash('No ad available — try again in a moment');
+      return;
+    }
+    await _coins.award(CoinRules.watchAdReward);
+    _flash('+${CoinRules.watchAdReward} coins!');
   }
 
   /// Builds the shareable result text (our own emoji style). Returns null when
@@ -255,7 +287,9 @@ class GameController extends ChangeNotifier {
   /// True when the just-finished daily broke a streak that a rewarded ad could
   /// bring back. Drives the "Restore streak" offer in the stats sheet.
   bool get canRestoreStreak =>
-      _mode == GameMode.daily && _gameOver && _storage.pendingRestoreStreak() > 0;
+      _mode == GameMode.daily &&
+      _gameOver &&
+      _storage.pendingRestoreStreak() > 0;
 
   /// Restores a broken streak after the user watches a rewarded ad (only on a
   /// real view).
@@ -283,15 +317,6 @@ class GameController extends ChangeNotifier {
       }
     }
   }
-
-  /// Milestone streaks get extra fanfare.
-  static bool _isStreakMilestone(int streak) =>
-      streak == 5 ||
-      streak == 10 ||
-      streak == 25 ||
-      streak == 50 ||
-      streak == 100 ||
-      (streak > 0 && streak % 100 == 0);
 
   /// Praise scaled to how few guesses it took.
   String _winMessage(int guesses) {

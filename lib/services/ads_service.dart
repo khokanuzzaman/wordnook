@@ -28,7 +28,8 @@ class AdsService implements GameAds {
   // Google's documented test ad unit IDs (safe to ship as dev defaults).
   static const _testRewardedAndroid = 'ca-app-pub-3940256099942544/5224354917';
   static const _testRewardedIos = 'ca-app-pub-3940256099942544/1712485313';
-  static const _testInterstitialAndroid = 'ca-app-pub-3940256099942544/1033173712';
+  static const _testInterstitialAndroid =
+      'ca-app-pub-3940256099942544/1033173712';
   static const _testInterstitialIos = 'ca-app-pub-3940256099942544/4411468910';
   static const _testBannerAndroid = 'ca-app-pub-3940256099942544/6300978111';
   static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';

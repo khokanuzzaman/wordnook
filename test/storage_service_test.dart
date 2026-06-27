@@ -37,19 +37,25 @@ void main() {
     });
 
     test('a loss resets the streak and offers a restore', () async {
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 1));
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 2));
-      final s = await storage.recordDailyResult(won: false, now: day(2026, 1, 3));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 1));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 2));
+      final s =
+          await storage.recordDailyResult(won: false, now: day(2026, 1, 3));
 
       expect(s.currentStreak, 0);
       expect(s.bestStreak, 2);
       expect(storage.pendingRestoreStreak(), 2, reason: 'lost streak of 2');
     });
 
-    test('a missed day breaks the streak; next win restarts at 1 and offers restore',
+    test(
+        'a missed day breaks the streak; next win restarts at 1 and offers restore',
         () async {
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 1));
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 2));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 1));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 2));
       // Skip Jan 3 entirely, win again on Jan 4.
       final s = await storage.recordDailyResult(
           won: true, guessesUsed: 3, now: day(2026, 1, 4));
@@ -59,9 +65,12 @@ void main() {
       expect(storage.pendingRestoreStreak(), 3);
     });
 
-    test('restoreStreak brings the streak back and continues next day', () async {
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 1));
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 2));
+    test('restoreStreak brings the streak back and continues next day',
+        () async {
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 1));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 2));
       await storage.recordDailyResult(won: false, now: day(2026, 1, 3));
 
       final restored = await storage.restoreStreak(now: day(2026, 1, 3));
@@ -75,14 +84,16 @@ void main() {
     });
 
     test('first ever win does not offer a restore', () async {
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 1));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 1));
       expect(storage.pendingRestoreStreak(), 0);
     });
   });
 
   group('stats', () {
     test('win rate and guess distribution', () async {
-      await storage.recordDailyResult(won: true, guessesUsed: 3, now: day(2026, 1, 1));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: day(2026, 1, 1));
       await storage.recordDailyResult(won: false, now: day(2026, 1, 2));
       final s = await storage.recordDailyResult(
           won: true, guessesUsed: 3, now: day(2026, 1, 3));

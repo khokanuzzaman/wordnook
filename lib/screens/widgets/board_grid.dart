@@ -45,7 +45,8 @@ class BoardGrid extends StatelessWidget {
             // Key flips from "empty" to "revealed" on submit, remounting the
             // tile so its reveal animation plays exactly once.
             return LetterTile(
-              key: ValueKey('$row-$col-${st == LetterStatus.empty ? 'e' : 'r'}'),
+              key:
+                  ValueKey('$row-$col-${st == LetterStatus.empty ? 'e' : 'r'}'),
               letter: ch.trim(),
               status: st,
               column: col,

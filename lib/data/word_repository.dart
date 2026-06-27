@@ -23,17 +23,45 @@ class WordRepository {
 
   /// Small built-in fallback so the app runs before real assets are added.
   static const List<String> _fallbackAnswers = [
-    'APPLE', 'BRAVE', 'CRANE', 'DRIFT', 'EAGER', 'FLAME', 'GRAPE', 'HOUSE',
-    'IVORY', 'JOLLY', 'KNEEL', 'LEMON', 'MANGO', 'NOBLE', 'OCEAN', 'PIANO',
-    'QUILT', 'RIVER', 'STONE', 'TIGER', 'ULTRA', 'VIVID', 'WHALE', 'YACHT',
-    'ZEBRA', 'CHARM', 'BLOOM', 'SPARK', 'GLIDE', 'PLUMP',
+    'APPLE',
+    'BRAVE',
+    'CRANE',
+    'DRIFT',
+    'EAGER',
+    'FLAME',
+    'GRAPE',
+    'HOUSE',
+    'IVORY',
+    'JOLLY',
+    'KNEEL',
+    'LEMON',
+    'MANGO',
+    'NOBLE',
+    'OCEAN',
+    'PIANO',
+    'QUILT',
+    'RIVER',
+    'STONE',
+    'TIGER',
+    'ULTRA',
+    'VIVID',
+    'WHALE',
+    'YACHT',
+    'ZEBRA',
+    'CHARM',
+    'BLOOM',
+    'SPARK',
+    'GLIDE',
+    'PLUMP',
   ];
 
   /// Loads lists from assets; falls back to the built-in list on failure.
   Future<void> load() async {
     try {
-      final answersRaw = await rootBundle.loadString('assets/words/answers.txt');
-      final allowedRaw = await rootBundle.loadString('assets/words/allowed.txt');
+      final answersRaw =
+          await rootBundle.loadString('assets/words/answers.txt');
+      final allowedRaw =
+          await rootBundle.loadString('assets/words/allowed.txt');
       _answers = _parse(answersRaw);
       _allowed = _parse(allowedRaw).toSet()..addAll(_answers);
       if (_answers.isEmpty) _useFallback();
@@ -80,7 +108,8 @@ class WordRepository {
   /// Everyone gets the same daily word.
   String dailyWord([DateTime? date]) {
     final d = (date ?? DateTime.now()).toUtc();
-    final dayIndex = DateTime.utc(d.year, d.month, d.day).difference(_epoch).inDays;
+    final dayIndex =
+        DateTime.utc(d.year, d.month, d.day).difference(_epoch).inDays;
     final i = dayIndex % _answers.length;
     return _answers[i < 0 ? i + _answers.length : i];
   }

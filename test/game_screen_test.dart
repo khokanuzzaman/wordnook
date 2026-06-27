@@ -7,6 +7,7 @@ import 'package:daily_word_game/screens/game_screen.dart';
 import 'package:daily_word_game/screens/widgets/banner_ad_slot.dart';
 import 'package:daily_word_game/screens/widgets/celebration_overlay.dart';
 import 'package:daily_word_game/services/ads_service.dart';
+import 'package:daily_word_game/services/coin_service.dart';
 import 'package:daily_word_game/services/storage_service.dart';
 import 'package:daily_word_game/state/game_controller.dart';
 
@@ -43,10 +44,14 @@ void main() {
     // Mark today's daily as already completed (won).
     await storage.saveDailyProgress(guesses: [answer], done: true);
 
-    final controller =
-        GameController(words: words, storage: storage, ads: _FakeAds());
+    final controller = GameController(
+        words: words,
+        storage: storage,
+        coins: CoinService(storage),
+        ads: _FakeAds());
 
-    await tester.pumpWidget(MaterialApp(home: GameScreen(controller: controller)));
+    await tester
+        .pumpWidget(MaterialApp(home: GameScreen(controller: controller)));
     // Let the post-frame callback + the 700ms reveal delay elapse, then settle
     // the bottom-sheet animation.
     await tester.pump();
@@ -72,10 +77,14 @@ void main() {
 
     final words = WordRepository()
       ..debugLoad(['CRANE', 'SLATE', 'BRINE', 'PLUMP', 'GHOST']);
-    final controller =
-        GameController(words: words, storage: storage, ads: _FakeAds());
+    final controller = GameController(
+        words: words,
+        storage: storage,
+        coins: CoinService(storage),
+        ads: _FakeAds());
 
-    await tester.pumpWidget(MaterialApp(home: GameScreen(controller: controller)));
+    await tester
+        .pumpWidget(MaterialApp(home: GameScreen(controller: controller)));
     await tester.pump();
 
     // Solve today's word in one guess.

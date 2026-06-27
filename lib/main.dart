@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'app.dart';
 import 'data/word_repository.dart';
 import 'services/ads_service.dart';
+import 'services/coin_service.dart';
 import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 import 'state/game_controller.dart';
@@ -29,7 +30,9 @@ Future<void> main() async {
   // off the critical path so it never blocks first paint.
   unawaited(_setUpDailyReminder(storage));
 
-  final controller = GameController(words: words, storage: storage);
+  final coins = CoinService(storage);
+  final controller =
+      GameController(words: words, storage: storage, coins: coins);
 
   runApp(WordGameApp(controller: controller));
 }

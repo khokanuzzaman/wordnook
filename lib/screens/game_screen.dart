@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../branding.dart';
+import '../logic/coin_rules.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
 import 'how_to_play_sheet.dart';
@@ -112,20 +113,21 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      // Rebuild on game state AND on the high-contrast palette toggle.
-      listenable: Listenable.merge([c, AppPalette.highContrast]),
+      // Rebuild on game state, coin balance, AND the active palette/theme.
+      listenable:
+          Listenable.merge([c, c.coinsListenable, AppPalette.highContrast]),
       builder: (context, _) {
         final isJourney = c.mode == GameMode.journey;
         return Stack(
           children: [
             Scaffold(
               appBar: AppBar(
+                titleSpacing: 12,
                 title: Text(
-                  isJourney
-                      ? 'Journey · Level ${c.journeyLevel}'
-                      : Branding.appName,
+                  isJourney ? 'Level ${c.journeyLevel}' : Branding.appName,
                 ),
                 actions: [
+                  _CoinChip(controller: c),
                   TextButton(
                     onPressed: _toggleMode,
                     child: Text(
@@ -137,7 +139,7 @@ class _GameScreenState extends State<GameScreen> {
                     ),
                   ),
                   IconButton(
-                    tooltip: 'Hint (watch ad)',
+                    tooltip: 'Reveal a letter (costs coins)',
                     onPressed: c.gameOver ? null : c.useHint,
                     icon: const Icon(Icons.lightbulb_outline),
                   ),
@@ -200,6 +202,42 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
+/// App-bar coin balance. Tapping it opens the watch-ad-to-earn flow.
+class _CoinChip extends StatelessWidget {
+  final GameController controller;
+  const _CoinChip({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Material(
+        color: Colors.white10,
+        borderRadius: BorderRadius.circular(20),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(20),
+          onTap: controller.watchAdForCoins,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.monetization_on,
+                    size: 18, color: Color(0xFFF2C24B)),
+                const SizedBox(width: 4),
+                Text('${controller.coins}',
+                    style: const TextStyle(fontWeight: FontWeight.bold)),
+                const SizedBox(width: 2),
+                const Icon(Icons.add, size: 14, color: Colors.white54),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 /// Social-proof strip shown above the Journey board.
 class _JourneyBanner extends StatelessWidget {
   final GameController controller;
@@ -250,7 +288,7 @@ class _EndActions extends StatelessWidget {
         OutlinedButton.icon(
           onPressed: onExtraGuess,
           icon: const Icon(Icons.add),
-          label: const Text('Extra guess (ad)'),
+          label: const Text('Extra guess (${CoinRules.extraGuessCost} coins)'),
         ),
       );
     }

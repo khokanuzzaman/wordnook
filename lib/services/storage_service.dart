@@ -12,14 +12,17 @@ class StorageService {
   static const _kDailyDate = 'daily_date'; // yyyy-mm-dd of saved board
   static const _kDailyGuesses = 'daily_guesses'; // csv of guesses
   static const _kDailyDone = 'daily_done'; // bool
-  static const _kBrokenStreak = 'broken_streak'; // streak value a rewarded ad can restore
+  static const _kBrokenStreak =
+      'broken_streak'; // streak value a rewarded ad can restore
   static const _kReminderEnabled = 'reminder_enabled'; // bool
   static const _kReminderHour = 'reminder_hour'; // int 0..23
   static const _kReminderMinute = 'reminder_minute'; // int 0..59
   static const _kOnboardingSeen = 'onboarding_seen'; // bool
   static const _kJourneyLevel = 'journey_level'; // int, 1-based current level
+  static const _kCoins = 'coins'; // int, soft currency balance
   static const _kHardMode = 'hard_mode'; // bool: revealed hints must be reused
-  static const _kHighContrast = 'high_contrast'; // bool: colorblind-safe palette
+  static const _kHighContrast =
+      'high_contrast'; // bool: colorblind-safe palette
 
   late final SharedPreferences _prefs;
 
@@ -68,7 +71,9 @@ class StorageService {
       } else {
         // First win, or a gap since the last win. A real streak was broken.
         newStreak = 1;
-        if (prevStreak > 0) brokenStreak = prevStreak + 1; // bridge the gap + today.
+        if (prevStreak > 0) {
+          brokenStreak = prevStreak + 1; // bridge the gap + today.
+        }
       }
       await _prefs.setString(_kLastWonDate, today);
     } else {
@@ -163,6 +168,12 @@ class StorageService {
   int get journeyLevel => _prefs.getInt(_kJourneyLevel) ?? 1;
   Future<void> setJourneyLevel(int level) =>
       _prefs.setInt(_kJourneyLevel, level < 1 ? 1 : level);
+
+  // --- Coins ---------------------------------------------------------------
+
+  int get coins => _prefs.getInt(_kCoins) ?? 0;
+  Future<void> setCoins(int value) =>
+      _prefs.setInt(_kCoins, value < 0 ? 0 : value);
 
   // --- Accessibility / difficulty ------------------------------------------
 
