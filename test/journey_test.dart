@@ -7,15 +7,18 @@ import 'package:daily_word_game/services/ads_service.dart';
 import 'package:daily_word_game/services/storage_service.dart';
 import 'package:daily_word_game/state/game_controller.dart';
 
-/// Records calls without touching the AdMob plugin.
+/// Records calls without touching the AdMob plugin. [rewardEarned] controls
+/// whether a rewarded ad simulates a real, earned view.
 class FakeAds implements GameAds {
+  FakeAds({this.rewardEarned = true});
+  final bool rewardEarned;
   int rewardedShown = 0;
   int interstitialCalls = 0;
 
   @override
-  Future<void> showRewarded({required void Function() onReward}) async {
+  Future<bool> showRewarded() async {
     rewardedShown++;
-    onReward();
+    return rewardEarned;
   }
 
   @override

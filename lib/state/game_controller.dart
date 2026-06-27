@@ -203,30 +203,39 @@ class GameController extends ChangeNotifier {
 
   // --- Rewarded features ---------------------------------------------------
 
-  /// Reveals one not-yet-solved position. Gated behind a rewarded ad.
-  void useHint() {
+  /// Reveals one not-yet-solved position. Gated behind a rewarded ad (only
+  /// grants on a real view).
+  Future<void> useHint() async {
     if (_gameOver) return;
-    _ads.showRewarded(onReward: () {
-      for (var i = 0; i < wordLength; i++) {
-        final solvedHere =
-            _guesses.any((g) => g.length > i && g[i] == _answer[i]);
-        if (!solvedHere) {
-          _flash('Hint: position ${i + 1} is "${_answer[i]}"');
-          return;
-        }
-      }
-      _flash("You're very close!");
-    });
+    if (!await _ads.showRewarded()) {
+      _flash('No ad available — try again in a moment');
+      return;
+    }
+    _revealHint();
   }
 
-  /// Grants one extra guess beyond the normal max. Gated behind a rewarded ad.
-  void useExtraGuess() {
+  void _revealHint() {
+    for (var i = 0; i < wordLength; i++) {
+      final solvedHere = _guesses.any((g) => g.length > i && g[i] == _answer[i]);
+      if (!solvedHere) {
+        _flash('Hint: position ${i + 1} is "${_answer[i]}"');
+        return;
+      }
+    }
+    _flash("You're very close!");
+  }
+
+  /// Grants one extra guess beyond the normal max. Gated behind a rewarded ad
+  /// (only grants on a real view).
+  Future<void> useExtraGuess() async {
     if (!_gameOver || _won) return;
-    _ads.showRewarded(onReward: () {
-      _gameOver = false;
-      _flash('Extra guess granted');
-      notifyListeners();
-    });
+    if (!await _ads.showRewarded()) {
+      _flash('No ad available — try again in a moment');
+      return;
+    }
+    _gameOver = false;
+    _flash('Extra guess granted');
+    notifyListeners();
   }
 
   /// Builds the shareable result text (our own emoji style). Returns null when
@@ -248,14 +257,17 @@ class GameController extends ChangeNotifier {
   bool get canRestoreStreak =>
       _mode == GameMode.daily && _gameOver && _storage.pendingRestoreStreak() > 0;
 
-  /// Restores a broken streak after the user watches a rewarded ad.
-  void restoreStreak() {
+  /// Restores a broken streak after the user watches a rewarded ad (only on a
+  /// real view).
+  Future<void> restoreStreak() async {
     if (!canRestoreStreak) return;
-    _ads.showRewarded(onReward: () async {
-      _stats = await _storage.restoreStreak();
-      _flash('Streak restored to ${_stats.currentStreak}!');
-      notifyListeners();
-    });
+    if (!await _ads.showRewarded()) {
+      _flash('No ad available — try again in a moment');
+      return;
+    }
+    _stats = await _storage.restoreStreak();
+    _flash('Streak restored to ${_stats.currentStreak}!');
+    notifyListeners();
   }
 
   // --- helpers -------------------------------------------------------------

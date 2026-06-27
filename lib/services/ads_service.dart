@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
@@ -5,7 +6,10 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 /// The slice of ad behaviour the game controller depends on. Kept narrow so it
 /// can be faked in unit tests without the AdMob plugin.
 abstract interface class GameAds {
-  Future<void> showRewarded({required void Function() onReward});
+  /// Shows a rewarded ad. Resolves to `true` ONLY if an ad actually displayed
+  /// AND the user earned the reward. Resolves to `false` when no ad was ready
+  /// or the user didn't earn it — callers must NOT grant anything on `false`.
+  Future<bool> showRewarded();
   void maybeShowJourneyInterstitial();
 }
 
@@ -93,30 +97,34 @@ class AdsService implements GameAds {
     );
   }
 
-  /// Shows a rewarded ad. Calls [onReward] only if the user earned the reward.
-  /// If no ad is ready, [onReward] is called anyway so the feature still works
-  /// in development — tighten this to require a real view before launch.
+  /// Shows a rewarded ad. Returns `true` only when an ad actually displayed and
+  /// the user earned the reward. If no ad is ready, returns `false` immediately
+  /// (and kicks off a load for next time) — the caller must NOT grant anything.
+  /// This prevents reward/coin farming when ads fail to fill.
   @override
-  Future<void> showRewarded({required void Function() onReward}) async {
+  Future<bool> showRewarded() async {
     final ad = _rewarded;
     if (ad == null) {
-      onReward(); // dev fallback; remove for production strictness.
       _loadRewarded();
-      return;
+      return false;
     }
+    _rewarded = null; // consume so it can't be shown twice
+    final completer = Completer<bool>();
+    var earned = false;
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
-        _rewarded = null;
         _loadRewarded();
+        if (!completer.isCompleted) completer.complete(earned);
       },
       onAdFailedToShowFullScreenContent: (ad, _) {
         ad.dispose();
-        _rewarded = null;
         _loadRewarded();
+        if (!completer.isCompleted) completer.complete(false);
       },
     );
-    ad.show(onUserEarnedReward: (_, __) => onReward());
+    await ad.show(onUserEarnedReward: (_, __) => earned = true);
+    return completer.future;
   }
 
   // --- Interstitial (Journey mode only) ------------------------------------

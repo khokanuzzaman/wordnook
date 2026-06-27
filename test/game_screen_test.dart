@@ -12,8 +12,7 @@ import 'package:daily_word_game/state/game_controller.dart';
 
 class _FakeAds implements GameAds {
   @override
-  Future<void> showRewarded({required void Function() onReward}) async =>
-      onReward();
+  Future<bool> showRewarded() async => true;
   @override
   void maybeShowJourneyInterstitial() {}
 }
