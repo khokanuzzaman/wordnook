@@ -94,7 +94,7 @@ void main() {
     });
   });
 
-  group('journey + entitlement persistence', () {
+  group('journey persistence', () {
     test('journey level defaults to 1 and persists', () async {
       expect(storage.journeyLevel, 1);
       await storage.setJourneyLevel(7);
@@ -102,12 +102,6 @@ void main() {
       // Floor at 1.
       await storage.setJourneyLevel(0);
       expect(storage.journeyLevel, 1);
-    });
-
-    test('removeAds entitlement defaults off and persists', () async {
-      expect(storage.removeAds, isFalse);
-      await storage.setRemoveAds(true);
-      expect(storage.removeAds, isTrue);
     });
   });
 

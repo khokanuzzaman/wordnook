@@ -3,10 +3,15 @@ import 'package:google_mobile_ads/google_mobile_ads.dart';
 
 import '../../services/ads_service.dart';
 
-/// A self-contained banner ad. Renders nothing when Remove Ads is owned or the
-/// banner hasn't loaded yet, so callers can drop it anywhere unconditionally.
+/// A self-contained banner ad. Renders nothing until the banner has loaded, so
+/// callers can drop it anywhere unconditionally.
 class BannerAdSlot extends StatefulWidget {
   const BannerAdSlot({super.key});
+
+  /// Test seam: when true, the slot never touches the AdMob plugin (so widget
+  /// tests that show screens containing a banner don't fail on platform calls).
+  @visibleForTesting
+  static bool debugDisabled = false;
 
   @override
   State<BannerAdSlot> createState() => _BannerAdSlotState();
@@ -19,7 +24,7 @@ class _BannerAdSlotState extends State<BannerAdSlot> {
   @override
   void initState() {
     super.initState();
-    if (!AdsService.instance.removeAds) _load();
+    if (!BannerAdSlot.debugDisabled) _load();
   }
 
   void _load() {
@@ -49,7 +54,7 @@ class _BannerAdSlotState extends State<BannerAdSlot> {
 
   @override
   Widget build(BuildContext context) {
-    if (AdsService.instance.removeAds || !_loaded || _ad == null) {
+    if (!_loaded || _ad == null) {
       return const SizedBox.shrink();
     }
     return SizedBox(

@@ -47,18 +47,11 @@ void main() {
     });
   });
 
-  group('ad cadence + entitlement gating', () {
+  group('ad cadence', () {
     test('interstitial is due every 3rd level', () {
       final ads = AdsService.instance..debugResetCadence();
       final results = [for (var i = 0; i < 6; i++) ads.shouldShowJourneyInterstitial()];
       expect(results, [false, false, true, false, false, true]);
-    });
-
-    test('Remove Ads suppresses interstitials entirely', () {
-      final ads = AdsService.instance..debugResetCadence();
-      ads.removeAds = true;
-      final results = [for (var i = 0; i < 6; i++) ads.shouldShowJourneyInterstitial()];
-      expect(results.every((r) => r == false), isTrue);
     });
   });
 

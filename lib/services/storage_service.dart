@@ -18,7 +18,6 @@ class StorageService {
   static const _kReminderMinute = 'reminder_minute'; // int 0..59
   static const _kOnboardingSeen = 'onboarding_seen'; // bool
   static const _kJourneyLevel = 'journey_level'; // int, 1-based current level
-  static const _kRemoveAds = 'remove_ads'; // bool entitlement
   static const _kHardMode = 'hard_mode'; // bool: revealed hints must be reused
   static const _kHighContrast = 'high_contrast'; // bool: colorblind-safe palette
 
@@ -164,11 +163,6 @@ class StorageService {
   int get journeyLevel => _prefs.getInt(_kJourneyLevel) ?? 1;
   Future<void> setJourneyLevel(int level) =>
       _prefs.setInt(_kJourneyLevel, level < 1 ? 1 : level);
-
-  // --- Ads entitlement -----------------------------------------------------
-
-  bool get removeAds => _prefs.getBool(_kRemoveAds) ?? false;
-  Future<void> setRemoveAds(bool value) => _prefs.setBool(_kRemoveAds, value);
 
   // --- Accessibility / difficulty ------------------------------------------
 

@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:daily_word_game/data/word_repository.dart';
 import 'package:daily_word_game/screens/game_screen.dart';
+import 'package:daily_word_game/screens/widgets/banner_ad_slot.dart';
 import 'package:daily_word_game/screens/widgets/celebration_overlay.dart';
 import 'package:daily_word_game/services/ads_service.dart';
 import 'package:daily_word_game/services/storage_service.dart';
@@ -20,7 +21,7 @@ class _FakeAds implements GameAds {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  tearDown(() => AdsService.instance.removeAds = false);
+  tearDown(() => BannerAdSlot.debugDisabled = false);
 
   testWidgets('returning player with a finished daily sees the stats sheet',
       (tester) async {
@@ -35,7 +36,7 @@ void main() {
     await storage.init();
     await storage.setOnboardingSeen();
     // Suppress the banner so the sheet doesn't touch the AdMob plugin in tests.
-    AdsService.instance.removeAds = true;
+    BannerAdSlot.debugDisabled = true;
 
     final words = WordRepository()
       ..debugLoad(['CRANE', 'SLATE', 'BRINE', 'PLUMP', 'GHOST']);
@@ -68,7 +69,7 @@ void main() {
     final storage = StorageService();
     await storage.init();
     await storage.setOnboardingSeen();
-    AdsService.instance.removeAds = true;
+    BannerAdSlot.debugDisabled = true;
 
     final words = WordRepository()
       ..debugLoad(['CRANE', 'SLATE', 'BRINE', 'PLUMP', 'GHOST']);

@@ -14,9 +14,9 @@ abstract interface class GameAds {
 /// at build time via --dart-define (see keys below). NEVER hardcode real IDs.
 ///
 /// Placements:
-///   - rewarded:    hint / reveal letter / extra guess / streak restore
+///   - rewarded:    watch-to-earn coins / streak restore
 ///   - interstitial: Journey level-end ONLY, frequency-capped
-///   - banner:      stats screen (suppressed when Remove Ads is owned)
+///   - banner:      stats screen
 class AdsService implements GameAds {
   AdsService._();
   static final AdsService instance = AdsService._();
@@ -45,11 +45,6 @@ class AdsService implements GameAds {
   // Frequency cap for Journey interstitials.
   int _journeyLevelsSinceAd = 0;
   static const _interstitialEveryNLevels = 3;
-
-  /// True when the user owns the Remove Ads IAP. Suppresses interstitials and
-  /// banners (rewarded boosters remain opt-in). Set from the persisted
-  /// entitlement at startup and after a purchase/restore.
-  bool removeAds = false;
 
   String get _rewardedUnitId {
     if (_realRewarded.isNotEmpty) return _realRewarded;
@@ -142,18 +137,16 @@ class AdsService implements GameAds {
   /// separate from [maybeShowJourneyInterstitial] so the gating is unit-testable
   /// without the AdMob plugin.
   bool shouldShowJourneyInterstitial() {
-    if (removeAds) return false;
     _journeyLevelsSinceAd++;
     if (_journeyLevelsSinceAd < _interstitialEveryNLevels) return false;
     _journeyLevelsSinceAd = 0;
     return true;
   }
 
-  /// Test seam: reset the cadence counter and entitlement to a known state.
+  /// Test seam: reset the cadence counter to a known state.
   @visibleForTesting
   void debugResetCadence() {
     _journeyLevelsSinceAd = 0;
-    removeAds = false;
   }
 
   /// Call at the end of a JOURNEY level. Shows an interstitial only every N
