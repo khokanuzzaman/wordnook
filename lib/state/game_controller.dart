@@ -37,6 +37,9 @@ class GameController extends ChangeNotifier {
   int get coins => _coins.coins;
   Listenable get coinsListenable => _coins;
 
+  /// Exposed so the settings screen can run coin-gated theme unlocks.
+  CoinService get coinService => _coins;
+
   static const int maxGuesses = 6;
   int get wordLength => WordRepository.wordLength;
 

@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
 
 import '../branding.dart';
+import '../services/coin_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
+import '../services/theme_service.dart';
 import '../theme/app_theme.dart';
 import 'how_to_play_sheet.dart';
 
-/// Settings: daily-reminder toggle + time, how-to-play, and about info.
+/// Settings: difficulty, board themes, daily reminder, how-to-play, about.
 class SettingsScreen extends StatefulWidget {
   final StorageService storage;
-  const SettingsScreen({super.key, required this.storage});
+  final CoinService coins;
+  const SettingsScreen({super.key, required this.storage, required this.coins});
 
   @override
   State<SettingsScreen> createState() => _SettingsScreenState();
@@ -17,22 +20,16 @@ class SettingsScreen extends StatefulWidget {
 
 class _SettingsScreenState extends State<SettingsScreen> {
   StorageService get _storage => widget.storage;
+  late final ThemeService _themes = ThemeService(_storage, widget.coins);
 
   late bool _reminderEnabled = _storage.reminderEnabled;
   late TimeOfDay _reminderTime =
       TimeOfDay(hour: _storage.reminderHour, minute: _storage.reminderMinute);
   late bool _hardMode = _storage.hardMode;
-  late bool _highContrast = _storage.highContrast;
 
   Future<void> _onToggleHardMode(bool value) async {
     setState(() => _hardMode = value);
     await _storage.setHardMode(value);
-  }
-
-  Future<void> _onToggleHighContrast(bool value) async {
-    setState(() => _highContrast = value);
-    await _storage.setHighContrast(value);
-    AppPalette.highContrast.value = value; // repaints the board live
   }
 
   Future<void> _onToggleReminder(bool value) async {
@@ -71,6 +68,19 @@ class _SettingsScreenState extends State<SettingsScreen> {
     }
   }
 
+  Future<void> _onTapTheme(GameTheme t) async {
+    if (_themes.isUnlocked(t)) {
+      await _themes.select(t.id);
+      return;
+    }
+    final ok = await _themes.unlock(t.id);
+    if (!ok && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Need ${t.cost} coins — play or watch to earn')),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -86,12 +96,21 @@ class _SettingsScreenState extends State<SettingsScreen> {
             value: _hardMode,
             onChanged: _onToggleHardMode,
           ),
-          SwitchListTile(
-            secondary: const Icon(Icons.contrast),
-            title: const Text('High-contrast colours'),
-            subtitle: const Text('Colour-blind-friendly blue / orange tiles.'),
-            value: _highContrast,
-            onChanged: _onToggleHighContrast,
+          const Divider(),
+          const _SectionHeader('Board theme'),
+          ListenableBuilder(
+            listenable: Listenable.merge([_themes, widget.coins]),
+            builder: (context, _) => Column(
+              children: [
+                for (final t in _themes.all)
+                  _ThemeTile(
+                    theme: t,
+                    selected: _themes.isSelected(t),
+                    unlocked: _themes.isUnlocked(t),
+                    onTap: () => _onTapTheme(t),
+                  ),
+              ],
+            ),
           ),
           const Divider(),
           const _SectionHeader('Reminders'),
@@ -123,6 +142,70 @@ class _SettingsScreenState extends State<SettingsScreen> {
           ),
         ],
       ),
+    );
+  }
+}
+
+/// One row in the board-theme picker: swatches + select / unlock control.
+class _ThemeTile extends StatelessWidget {
+  final GameTheme theme;
+  final bool selected;
+  final bool unlocked;
+  final VoidCallback onTap;
+  const _ThemeTile({
+    required this.theme,
+    required this.selected,
+    required this.unlocked,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final Widget trailing;
+    if (selected) {
+      trailing = const Icon(Icons.check_circle, color: AppPalette.correct);
+    } else if (unlocked) {
+      trailing = const Text('Select', style: TextStyle(color: Colors.white70));
+    } else {
+      trailing = Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.monetization_on,
+              size: 16, color: Color(0xFFF2C24B)),
+          const SizedBox(width: 4),
+          Text('${theme.cost}',
+              style: const TextStyle(fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          const Icon(Icons.lock_outline, size: 16, color: Colors.white54),
+        ],
+      );
+    }
+
+    return ListTile(
+      onTap: onTap,
+      leading: _Swatches(theme: theme),
+      title: Text(theme.name),
+      subtitle: theme.accessibility ? const Text('Accessibility') : null,
+      trailing: trailing,
+    );
+  }
+}
+
+class _Swatches extends StatelessWidget {
+  final GameTheme theme;
+  const _Swatches({required this.theme});
+
+  @override
+  Widget build(BuildContext context) {
+    Widget dot(Color c) => Container(
+          width: 16,
+          height: 16,
+          margin: const EdgeInsets.symmetric(horizontal: 1),
+          decoration: BoxDecoration(color: c, shape: BoxShape.circle),
+        );
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [dot(theme.correct), dot(theme.present), dot(theme.absent)],
     );
   }
 }

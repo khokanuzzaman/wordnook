@@ -113,9 +113,9 @@ class _GameScreenState extends State<GameScreen> {
   @override
   Widget build(BuildContext context) {
     return ListenableBuilder(
-      // Rebuild on game state, coin balance, AND the active palette/theme.
+      // Rebuild on game state, coin balance, AND the active board theme.
       listenable:
-          Listenable.merge([c, c.coinsListenable, AppPalette.highContrast]),
+          Listenable.merge([c, c.coinsListenable, AppPalette.selectedTheme]),
       builder: (context, _) {
         final isJourney = c.mode == GameMode.journey;
         return Stack(
@@ -156,8 +156,10 @@ class _GameScreenState extends State<GameScreen> {
                         case 'settings':
                           Navigator.of(context).push(
                             MaterialPageRoute(
-                              builder: (_) =>
-                                  SettingsScreen(storage: c.storage),
+                              builder: (_) => SettingsScreen(
+                                storage: c.storage,
+                                coins: c.coinService,
+                              ),
                             ),
                           );
                       }

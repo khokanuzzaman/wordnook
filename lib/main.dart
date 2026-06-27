@@ -16,8 +16,8 @@ Future<void> main() async {
   final storage = StorageService();
   await storage.init();
 
-  // Apply the saved accessibility preference before the first frame.
-  AppPalette.highContrast.value = storage.highContrast;
+  // Apply the saved board theme before the first frame.
+  AppPalette.selectedTheme.value = ThemeRegistry.byId(storage.selectedThemeId);
 
   final words = WordRepository();
   await words.load();

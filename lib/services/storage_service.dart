@@ -21,8 +21,8 @@ class StorageService {
   static const _kJourneyLevel = 'journey_level'; // int, 1-based current level
   static const _kCoins = 'coins'; // int, soft currency balance
   static const _kHardMode = 'hard_mode'; // bool: revealed hints must be reused
-  static const _kHighContrast =
-      'high_contrast'; // bool: colorblind-safe palette
+  static const _kSelectedTheme = 'selected_theme'; // string theme id
+  static const _kUnlockedThemes = 'unlocked_themes'; // csv of unlocked ids
 
   late final SharedPreferences _prefs;
 
@@ -175,14 +175,28 @@ class StorageService {
   Future<void> setCoins(int value) =>
       _prefs.setInt(_kCoins, value < 0 ? 0 : value);
 
-  // --- Accessibility / difficulty ------------------------------------------
+  // --- Difficulty ----------------------------------------------------------
 
   bool get hardMode => _prefs.getBool(_kHardMode) ?? false;
   Future<void> setHardMode(bool value) => _prefs.setBool(_kHardMode, value);
 
-  bool get highContrast => _prefs.getBool(_kHighContrast) ?? false;
-  Future<void> setHighContrast(bool value) =>
-      _prefs.setBool(_kHighContrast, value);
+  // --- Themes --------------------------------------------------------------
+
+  /// Selected board theme id (defaults to the free 'cozy' theme).
+  String get selectedThemeId => _prefs.getString(_kSelectedTheme) ?? 'cozy';
+  Future<void> setSelectedThemeId(String id) =>
+      _prefs.setString(_kSelectedTheme, id);
+
+  /// Ids of paid themes the player has unlocked (free themes aren't stored).
+  Set<String> get unlockedThemes {
+    final csv = _prefs.getString(_kUnlockedThemes) ?? '';
+    return csv.isEmpty ? <String>{} : csv.split(',').toSet();
+  }
+
+  Future<void> addUnlockedTheme(String id) async {
+    final set = unlockedThemes..add(id);
+    await _prefs.setString(_kUnlockedThemes, set.join(','));
+  }
 
   // --- helpers -------------------------------------------------------------
 
