@@ -3,6 +3,8 @@ import 'dart:io' show Platform;
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
+import 'analytics_service.dart';
+
 /// The slice of ad behaviour the game controller depends on. Kept narrow so it
 /// can be faked in unit tests without the AdMob plugin.
 abstract interface class GameAds {
@@ -44,6 +46,14 @@ class AdsService implements GameAds {
   // an AdMob policy strike. From --dart-define=ADMOB_TEST_DEVICE_IDS=...
   static const _testDeviceIds = String.fromEnvironment('ADMOB_TEST_DEVICE_IDS');
 
+  // When set to '1'/'true', forces the UMP consent form to behave as if the
+  // device were in the EEA, so the consent flow can be verified on a test
+  // device outside Europe. Uses [_testDeviceIds] as the debug identifiers.
+  // From --dart-define=ADMOB_CONSENT_DEBUG_EEA=1. NEVER enable for a real
+  // production build — it would show the EEA form to everyone.
+  static const _consentDebugEea =
+      String.fromEnvironment('ADMOB_CONSENT_DEBUG_EEA');
+
   RewardedAd? _rewarded;
   InterstitialAd? _interstitial;
 
@@ -67,22 +77,66 @@ class AdsService implements GameAds {
   }
 
   Future<void> init() async {
-    // Register test devices first so real ad units serve TEST ads on them.
     final testIds = _testDeviceIds
         .split(',')
         .map((s) => s.trim())
         .where((s) => s.isNotEmpty)
         .toList();
+
+    // Gather user consent (UMP) BEFORE requesting any ads. Required for
+    // GDPR/EEA; on non-EEA devices the form simply isn't shown. Failures are
+    // non-fatal — AdMob then serves non-personalized ads.
+    await _gatherConsent(testIds);
+
+    // Register test devices so real ad units serve TEST ads on them (avoids
+    // policy strikes from self-clicks during development).
     if (testIds.isNotEmpty) {
       await MobileAds.instance.updateRequestConfiguration(
         RequestConfiguration(testDeviceIds: testIds),
       );
     }
     await MobileAds.instance.initialize();
-    // TODO(consent): integrate the UMP consent flow before requesting ads in
-    // GDPR regions, then load. eCPM in Tier-1 depends on consented signals.
     _loadRewarded();
     _loadInterstitial();
+  }
+
+  /// Runs the UMP consent flow: refresh consent info, then show the consent
+  /// form if one is required. Completes once the form is dismissed, consent
+  /// isn't required, or the request fails — never throws, never blocks
+  /// indefinitely, so ad init can always proceed.
+  Future<void> _gatherConsent(List<String> testIds) async {
+    final debugEea = _consentDebugEea == '1' ||
+        _consentDebugEea.toLowerCase() == 'true';
+    final params = ConsentRequestParameters(
+      consentDebugSettings: (debugEea && testIds.isNotEmpty)
+          ? ConsentDebugSettings(
+              debugGeography: DebugGeography.debugGeographyEea,
+              testIdentifiers: testIds,
+            )
+          : null,
+    );
+
+    final completer = Completer<void>();
+    void done() {
+      if (!completer.isCompleted) completer.complete();
+    }
+
+    ConsentInformation.instance.requestConsentInfoUpdate(
+      params,
+      () async {
+        // Info refreshed — show the form only if consent is required.
+        try {
+          await ConsentForm.loadAndShowConsentFormIfRequired((_) => done());
+        } catch (_) {
+          done();
+        }
+      },
+      (FormError _) => done(), // Update failed — proceed without a form.
+    );
+
+    // Safety net: if the platform never calls back, don't hang ad init.
+    return completer.future
+        .timeout(const Duration(seconds: 8), onTimeout: () {});
   }
 
   // --- Rewarded ------------------------------------------------------------
@@ -124,7 +178,11 @@ class AdsService implements GameAds {
         if (!completer.isCompleted) completer.complete(false);
       },
     );
-    await ad.show(onUserEarnedReward: (_, __) => earned = true);
+    AnalyticsService.instance.logEvent(AnalyticsEvents.rewardedShown);
+    await ad.show(onUserEarnedReward: (_, __) {
+      earned = true;
+      AnalyticsService.instance.logEvent(AnalyticsEvents.rewardedEarned);
+    });
     return completer.future;
   }
 
@@ -180,6 +238,7 @@ class AdsService implements GameAds {
         _loadInterstitial();
       },
     );
+    AnalyticsService.instance.logEvent(AnalyticsEvents.interstitialShown);
     ad.show();
   }
 }

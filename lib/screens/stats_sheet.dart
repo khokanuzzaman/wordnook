@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:share_plus/share_plus.dart';
 import '../models/game_result.dart';
+import '../services/analytics_service.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
 import 'widgets/banner_ad_slot.dart';
@@ -10,6 +11,7 @@ class StatsSheet extends StatelessWidget {
   const StatsSheet({super.key, required this.controller});
 
   static void show(BuildContext context, GameController controller) {
+    AnalyticsService.instance.logEvent(AnalyticsEvents.statsOpened);
     showModalBottomSheet(
       context: context,
       backgroundColor: AppPalette.surface,
@@ -72,8 +74,12 @@ class StatsSheet extends StatelessWidget {
                     ? null
                     : () {
                         final text = controller.shareText!;
+                        AnalyticsService.instance.logEvent(
+                          AnalyticsEvents.shareResult,
+                          {AnalyticsParams.mode: controller.mode.name},
+                        );
                         Navigator.pop(context);
-                        Share.share(text);
+                        SharePlus.instance.share(ShareParams(text: text));
                       },
                 icon: const Icon(Icons.share),
                 label: const Text('Share result'),

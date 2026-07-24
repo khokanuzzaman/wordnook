@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../theme/app_theme.dart';
+import 'analytics_service.dart';
 import 'coin_service.dart';
 import 'storage_service.dart';
 
@@ -30,6 +31,7 @@ class ThemeService extends ChangeNotifier {
     if (!isUnlocked(t)) return;
     await _storage.setSelectedThemeId(id);
     AppPalette.selectedTheme.value = t;
+    AnalyticsService.instance.syncTheme(id);
     notifyListeners();
   }
 
@@ -42,6 +44,12 @@ class ThemeService extends ChangeNotifier {
       return true;
     }
     if (!await _coins.trySpend(t.cost)) return false;
+    AnalyticsService.instance.logEvent(AnalyticsEvents.coinsSpent, {
+      AnalyticsParams.amount: t.cost,
+      AnalyticsParams.sink: AnalyticsSinks.theme,
+    });
+    AnalyticsService.instance.logEvent(
+        AnalyticsEvents.themeUnlocked, {AnalyticsParams.themeId: id});
     await _storage.addUnlockedTheme(id);
     await select(id);
     return true;

@@ -8,8 +8,12 @@ import '../theme/app_theme.dart';
 class HowToPlaySheet extends StatelessWidget {
   const HowToPlaySheet({super.key});
 
-  static Future<void> show(BuildContext context) {
-    return showModalBottomSheet<void>(
+  /// Shows the sheet. Resolves to `true` when the user taps "Got it", or
+  /// `null` when they dismiss it (swipe/back) — used by the first-run flow to
+  /// tell onboarding_completed from onboarding_skipped. Closing behaviour is
+  /// identical either way.
+  static Future<bool?> show(BuildContext context) {
+    return showModalBottomSheet<bool>(
       context: context,
       backgroundColor: AppPalette.surface,
       isScrollControlled: true,
@@ -67,7 +71,7 @@ class HowToPlaySheet extends StatelessWidget {
             SizedBox(
               width: double.infinity,
               child: FilledButton(
-                onPressed: () => Navigator.of(context).pop(),
+                onPressed: () => Navigator.of(context).pop(true),
                 child: const Text('Got it'),
               ),
             ),

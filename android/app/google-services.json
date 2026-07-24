@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "633961056558",
+    "project_id": "wordnook-app",
+    "storage_bucket": "wordnook-app.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:633961056558:android:d5710b1045dcfefccb52bf",
+        "android_client_info": {
+          "package_name": "com.khokan.dailyword"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyATpxANOxDxyNw4U14nbDgGvUWGiiuB_Vk"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

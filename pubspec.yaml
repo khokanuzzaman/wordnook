@@ -1,7 +1,7 @@
 name: daily_word_game
 description: A daily word-guessing puzzle game (Android + iOS).
 publish_to: "none"
-version: 0.1.0+1
+version: 0.1.0+2
 
 environment:
   sdk: ">=3.3.0 <4.0.0"
@@ -11,7 +11,9 @@ dependencies:
     sdk: flutter
   shared_preferences: ^2.2.3
   google_mobile_ads: ^5.1.0
-  share_plus: ^9.0.0
+  firebase_core: ^3.6.0
+  firebase_analytics: ^11.3.3
+  share_plus: ^13.2.1
   flutter_local_notifications: ^17.2.3
   timezone: ^0.9.4
 

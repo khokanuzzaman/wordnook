@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../branding.dart';
+import '../services/analytics_service.dart';
 import '../services/coin_service.dart';
 import '../services/notification_service.dart';
 import '../services/storage_service.dart';
@@ -30,11 +31,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _onToggleHardMode(bool value) async {
     setState(() => _hardMode = value);
     await _storage.setHardMode(value);
+    AnalyticsService.instance.logEvent(
+        AnalyticsEvents.hardModeToggled, {AnalyticsParams.enabled: value});
   }
 
   Future<void> _onToggleReminder(bool value) async {
     setState(() => _reminderEnabled = value);
     await _storage.setReminderEnabled(value);
+    AnalyticsService.instance.logEvent(value
+        ? AnalyticsEvents.reminderEnabled
+        : AnalyticsEvents.reminderDisabled);
+    AnalyticsService.instance.syncReminder(value);
     if (value) {
       final granted = await NotificationService.instance.requestPermissions();
       if (!granted && mounted) {
