@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../models/letter_status.dart';
 import '../../state/game_controller.dart';
 import '../../theme/app_theme.dart';
 
@@ -30,6 +31,9 @@ class Keyboard extends StatelessWidget {
     final status = controller.keyStatus[label];
     final color =
         status == null ? AppPalette.keyIdle : AppPalette.forStatus(status);
+    // A letter given by a purchased hint gets an accent outline, so the reveal
+    // is visible on the keyboard too (without pretending it was guessed).
+    final isHinted = controller.revealedHints.containsValue(label);
     return Expanded(
       flex: flex,
       child: Padding(
@@ -46,6 +50,12 @@ class Keyboard extends StatelessWidget {
             decoration: BoxDecoration(
               color: color,
               borderRadius: BorderRadius.circular(6),
+              border: isHinted
+                  ? Border.all(
+                      color: AppPalette.forStatus(LetterStatus.correct),
+                      width: 2,
+                    )
+                  : null,
             ),
             child: Text(
               label,

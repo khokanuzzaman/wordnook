@@ -24,6 +24,7 @@ class BoardGrid extends StatelessWidget {
     for (var row = 0; row < rowCount; row++) {
       String letters;
       List<LetterStatus>? statuses;
+      var isActiveRow = false;
 
       if (row < c.guesses.length) {
         letters = c.guesses[row];
@@ -31,6 +32,7 @@ class BoardGrid extends StatelessWidget {
       } else if (row == c.guesses.length && !c.gameOver) {
         letters = c.current.padRight(c.wordLength);
         statuses = null;
+        isActiveRow = true;
       } else {
         letters = ' ' * c.wordLength;
         statuses = null;
@@ -42,14 +44,19 @@ class BoardGrid extends StatelessWidget {
           children: List.generate(c.wordLength, (col) {
             final ch = col < letters.length ? letters[col] : ' ';
             final st = statuses == null ? LetterStatus.empty : statuses[col];
+            // A purchased hint shows as a ghost letter in the row you're
+            // typing, until you actually type over that position.
+            final hint = c.revealedHints[col];
+            final showHint = isActiveRow && ch.trim().isEmpty && hint != null;
             // Key flips from "empty" to "revealed" on submit, remounting the
             // tile so its reveal animation plays exactly once.
             return LetterTile(
-              key:
-                  ValueKey('$row-$col-${st == LetterStatus.empty ? 'e' : 'r'}'),
-              letter: ch.trim(),
+              key: ValueKey('$row-$col-'
+                  '${st == LetterStatus.empty ? 'e' : 'r'}${showHint ? 'h' : ''}'),
+              letter: showHint ? hint : ch.trim(),
               status: st,
               column: col,
+              isHint: showHint,
             );
           }),
         ),

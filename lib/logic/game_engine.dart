@@ -46,18 +46,28 @@ class GameEngine {
   static bool isWinning(List<LetterStatus> statuses) =>
       statuses.every((s) => s == LetterStatus.correct);
 
-  /// Hard-mode check: every hint revealed by [previousGuesses] must be reused in
+  /// Hard-mode check: every hint revealed by [previousGuesses] — and every
+  /// position revealed by a purchased hint in [revealed] — must be reused in
   /// [guess]. Returns a human-readable reason if the guess violates the rule, or
   /// null if it's acceptable. Pure (no UI), so it can be unit-tested.
   ///
   /// Rules (standard "hard mode"):
   ///  - a letter found in the correct spot must stay in that spot;
-  ///  - a letter known to be present must appear somewhere in the guess.
+  ///  - a letter known to be present must appear somewhere in the guess;
+  ///  - a position revealed by a hint must hold that letter.
   static String? hardModeViolation(
     String guess,
     List<String> previousGuesses,
-    String answer,
-  ) {
+    String answer, {
+    Map<int, String> revealed = const {},
+  }) {
+    // A purchased reveal is the strongest clue the player has, so check it
+    // first and report it plainly.
+    for (final entry in revealed.entries) {
+      if (entry.key < guess.length && guess[entry.key] != entry.value) {
+        return '${_ordinal(entry.key + 1)} letter must be ${entry.value}';
+      }
+    }
     for (final prev in previousGuesses) {
       final statuses = evaluateGuess(prev, answer);
       // Correct letters must be kept in place.

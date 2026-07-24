@@ -1,7 +1,7 @@
-import 'dart:math';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 
+import '../logic/deterministic_shuffle.dart';
 import '../models/word_pack.dart';
 
 /// Loads word lists and selects words. Answers (the curated, fair list of
@@ -17,9 +17,21 @@ class WordRepository {
   /// to the same word across devices and launches.
   static const int _journeySeed = 0x5EED;
 
+  /// Fixed seed for the DAILY play-order shuffle. Deliberately different from
+  /// [_journeySeed] so daily and journey don't walk the same order.
+  ///
+  /// The answers file is sorted alphabetically, so indexing it directly by day
+  /// made consecutive days consecutive words (HEAVY → HEDGE → HEFTY …), letting
+  /// anyone who played yesterday guess today's first letters. Daily now draws
+  /// from a fixed permutation instead.
+  static const int _dailySeed = 0xD4117A11;
+
   List<String> _answers = const [];
   Set<String> _allowed = const {};
   List<WordPack> _packs = const [];
+
+  /// Deterministic permutation of [_answers] that the daily walks in order.
+  List<String> _dailyOrder = const [];
 
   /// Small built-in fallback so the app runs before real assets are added.
   static const List<String> _fallbackAnswers = [
@@ -68,7 +80,7 @@ class WordRepository {
     } catch (_) {
       _useFallback();
     }
-    _buildPacks();
+    _rebuildOrders();
   }
 
   void _useFallback() {
@@ -82,6 +94,15 @@ class WordRepository {
     _answers = answers.map((w) => w.toUpperCase()).toList();
     _allowed = (allowed?.map((w) => w.toUpperCase()).toSet() ?? <String>{})
       ..addAll(_answers);
+    _rebuildOrders();
+  }
+
+  /// Rebuilds both deterministic play orders from [_answers].
+  ///
+  /// Daily and Journey each walk their own fixed permutation (different seeds),
+  /// produced by our own PRNG so the mapping can't drift with an SDK update.
+  void _rebuildOrders() {
+    _dailyOrder = DeterministicShuffle.shuffled(_answers, _dailySeed);
     _buildPacks();
   }
 
@@ -89,10 +110,12 @@ class WordRepository {
   /// pack whose play order is a deterministic shuffle of the answers, so levels
   /// don't march alphabetically. Additional themed packs can be added here.
   void _buildPacks() {
-    final order = List<String>.from(_answers);
-    order.shuffle(Random(_journeySeed));
     _packs = [
-      WordPack(id: 'everyday', name: 'Everyday', answers: order),
+      WordPack(
+        id: 'everyday',
+        name: 'Everyday',
+        answers: DeterministicShuffle.shuffled(_answers, _journeySeed),
+      ),
     ];
   }
 
@@ -104,14 +127,16 @@ class WordRepository {
 
   bool _isAlpha(String s) => RegExp(r'^[A-Z]+$').hasMatch(s);
 
-  /// The deterministic answer for [date] (UTC day index into the answers list).
-  /// Everyone gets the same daily word.
+  /// The deterministic answer for [date]. Everyone gets the same daily word.
+  ///
+  /// Walks [_dailyOrder] (a fixed permutation), NOT the alphabetically sorted
+  /// answers list, so consecutive days are unrelated words.
   String dailyWord([DateTime? date]) {
     final d = (date ?? DateTime.now()).toUtc();
     final dayIndex =
         DateTime.utc(d.year, d.month, d.day).difference(_epoch).inDays;
-    final i = dayIndex % _answers.length;
-    return _answers[i < 0 ? i + _answers.length : i];
+    final i = dayIndex % _dailyOrder.length;
+    return _dailyOrder[i < 0 ? i + _dailyOrder.length : i];
   }
 
   /// The 1-based daily puzzle number for [date] (day 1 = the epoch).

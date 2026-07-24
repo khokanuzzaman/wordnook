@@ -14,11 +14,17 @@ class LetterTile extends StatefulWidget {
   /// Column index, used to stagger the reveal flip across a row.
   final int column;
 
+  /// True when this letter was GIVEN by a purchased hint rather than typed.
+  /// Renders as a translucent "ghost" letter in an outlined tile, so it reads
+  /// as a clue you own — distinct from both a typed letter and a solved tile.
+  final bool isHint;
+
   const LetterTile({
     super.key,
     required this.letter,
     required this.status,
     this.column = 0,
+    this.isHint = false,
   });
 
   @override
@@ -68,6 +74,8 @@ class _LetterTileState extends State<LetterTile>
   Widget build(BuildContext context) {
     final color = AppPalette.forStatus(widget.status);
     final isEmpty = widget.status == LetterStatus.empty;
+    // Hint accent tracks the active board theme's "correct" colour.
+    final hintColor = AppPalette.forStatus(LetterStatus.correct);
 
     return AnimatedBuilder(
       animation: _controller,
@@ -98,21 +106,26 @@ class _LetterTileState extends State<LetterTile>
           color: color,
           borderRadius: BorderRadius.circular(6),
           border: Border.all(
-            color: isEmpty
-                ? (widget.letter.isNotEmpty
-                    ? AppPalette.keyIdle
-                    : AppPalette.border)
-                : color,
+            color: widget.isHint
+                ? hintColor
+                : isEmpty
+                    ? (widget.letter.isNotEmpty
+                        ? AppPalette.keyIdle
+                        : AppPalette.border)
+                    : color,
             width: 2,
           ),
         ),
         alignment: Alignment.center,
         child: Text(
           widget.letter.toUpperCase(),
-          style: const TextStyle(
+          style: TextStyle(
             fontSize: 24,
             fontWeight: FontWeight.bold,
-            color: Colors.white,
+            // Given, not guessed: translucent accent instead of solid white.
+            color: widget.isHint
+                ? hintColor.withValues(alpha: 0.55)
+                : Colors.white,
           ),
         ),
       ),

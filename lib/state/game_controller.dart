@@ -8,6 +8,7 @@ import '../logic/share_formatter.dart';
 import '../models/game_result.dart';
 import '../models/letter_status.dart';
 import '../services/ads_service.dart';
+import '../services/analytics_service.dart';
 import '../services/coin_service.dart';
 import '../services/storage_service.dart';
 
@@ -20,15 +21,26 @@ class GameController extends ChangeNotifier {
     required StorageService storage,
     required CoinService coins,
     GameAds? ads,
+    Analytics? analytics,
   })  : _words = words,
         _storage = storage,
         _coins = coins,
-        _ads = ads ?? AdsService.instance;
+        _ads = ads ?? AdsService.instance,
+        _analyticsOverride = analytics;
 
   final WordRepository _words;
   final StorageService _storage;
   final CoinService _coins;
   final GameAds _ads;
+
+  // Read the live global unless a test injected an override, so events still
+  // flow once async analytics init finishes after this controller is built.
+  final Analytics? _analyticsOverride;
+  Analytics get _analytics => _analyticsOverride ?? AnalyticsService.instance;
+
+  // Guards the once-per-entry completion analytics (daily_completed /
+  // streak_broken), so the rewarded extra-guess re-entry can't double-fire.
+  bool _dailyResultLogged = false;
 
   /// Exposed for the settings screen (reminder prefs, onboarding flag).
   StorageService get storage => _storage;
@@ -88,6 +100,18 @@ class GameController extends ChangeNotifier {
   final Map<String, LetterStatus> _keyStatus = {};
   Map<String, LetterStatus> get keyStatus => Map.unmodifiable(_keyStatus);
 
+  /// Positions revealed by a purchased hint, as position → letter. Persisted so
+  /// a bought hint survives a restart instead of vanishing with its snackbar.
+  final Map<int, String> _revealed = {};
+  Map<int, String> get revealedHints => Map.unmodifiable(_revealed);
+
+  /// Identifies the puzzle the reveals belong to, so they clear on a new daily
+  /// date, a new journey level, AND a journey retry (which swaps in a different
+  /// word for the same level).
+  String get _hintScope => _mode == GameMode.daily
+      ? 'd:${_storage.todayKey()}'
+      : 'j:$_journeyLevel:$_journeyAttempt';
+
   /// Evaluated statuses for a submitted guess row.
   List<LetterStatus> statusesFor(String guess) =>
       GameEngine.evaluateGuess(guess, _answer);
@@ -102,6 +126,7 @@ class GameController extends ChangeNotifier {
     _won = false;
     _message = null;
     _keyStatus.clear();
+    _dailyResultLogged = false;
 
     if (mode == GameMode.daily) {
       _answer = _words.dailyWord();
@@ -115,12 +140,22 @@ class GameController extends ChangeNotifier {
         _gameOver = true;
         _won = saved.isNotEmpty && saved.last == _answer;
       }
+      _analytics.logEvent(AnalyticsEvents.dailyStarted);
     } else {
       _journeyLevel = _storage.journeyLevel;
       _journeyAttempt =
           0; // fresh entry to a level starts at its canonical word
       _answer = _journeyWord();
+      _analytics.logEvent(AnalyticsEvents.journeyLevelStarted,
+          {AnalyticsParams.level: _journeyLevel});
     }
+
+    // Restore hints bought for THIS puzzle (scope-checked, so a new date or
+    // level yields nothing).
+    _revealed
+      ..clear()
+      ..addAll(_storage.loadHints(_hintScope));
+
     notifyListeners();
   }
 
@@ -136,6 +171,10 @@ class GameController extends ChangeNotifier {
     _won = false;
     _message = null;
     _keyStatus.clear();
+    // A retry is a different word, so previously revealed positions no longer
+    // apply. (The stored copy is scoped to the old attempt and simply won't
+    // load again.)
+    _revealed.clear();
     _answer = _journeyWord();
     notifyListeners();
   }
@@ -166,9 +205,10 @@ class GameController extends ChangeNotifier {
       _flash('Not in word list');
       return;
     }
-    if (_storage.hardMode && _guesses.isNotEmpty) {
-      final violation =
-          GameEngine.hardModeViolation(_current, _guesses, _answer);
+    if (_storage.hardMode && (_guesses.isNotEmpty || _revealed.isNotEmpty)) {
+      final violation = GameEngine.hardModeViolation(
+          _current, _guesses, _answer,
+          revealed: _revealed);
       if (violation != null) {
         _flash('Hard mode: $violation');
         return;
@@ -192,16 +232,45 @@ class GameController extends ChangeNotifier {
     if (_mode == GameMode.daily) {
       await _storage.saveDailyProgress(guesses: _guesses, done: _gameOver);
       if (_gameOver) {
+        final prevStreak = _stats.currentStreak; // before recording
         _stats = await _storage.recordDailyResult(
           won: _won,
           guessesUsed: _won ? _guesses.length : null,
         );
+        // Fire completion analytics at most once per entry (a rewarded extra
+        // guess can re-run this block).
+        if (!_dailyResultLogged) {
+          _dailyResultLogged = true;
+          _analytics.logEvent(AnalyticsEvents.dailyCompleted, {
+            AnalyticsParams.solved: _won,
+            AnalyticsParams.guessCount: _guesses.length,
+            AnalyticsParams.streakAfter: _stats.currentStreak,
+          });
+          // streak_broken hooks into the SAME broken-streak value the restore
+          // flow uses (recomputed once per completed daily). reason=loss when
+          // the daily was lost, missed_day when a gap broke it but they still
+          // returned and won today.
+          if (_storage.pendingRestoreStreak() > 0 && prevStreak > 0) {
+            _analytics.logEvent(AnalyticsEvents.streakBroken, {
+              AnalyticsParams.previousStreak: prevStreak,
+              AnalyticsParams.reason:
+                  _won ? AnalyticsReasons.missedDay : AnalyticsReasons.loss,
+            });
+          }
+          _analytics.syncStreak(_stats.currentStreak);
+          _analytics.syncPlayed(_stats.gamesPlayed);
+        }
         if (_won) {
-          await _coins.award(CoinRules.dailyWinReward(
+          final reward = CoinRules.dailyWinReward(
             guessesUsed: _guesses.length,
             maxGuesses: maxGuesses,
             streak: _stats.currentStreak,
-          ));
+          );
+          await _coins.award(reward);
+          _analytics.logEvent(AnalyticsEvents.coinsEarned, {
+            AnalyticsParams.amount: reward,
+            AnalyticsParams.source: AnalyticsSources.dailyWin,
+          });
           // Celebrate the streak once it's worth bragging about.
           if (_stats.currentStreak >= 2) {
             final milestone = CoinRules.isStreakMilestone(_stats.currentStreak);
@@ -213,12 +282,23 @@ class GameController extends ChangeNotifier {
       }
     } else if (_gameOver && _won) {
       // Journey: a solved level counts as completed — advance, reward, (maybe) ad.
+      final completedLevel = _journeyLevel;
       _journeyLevel += 1;
       await _storage.setJourneyLevel(_journeyLevel);
-      await _coins.award(CoinRules.journeyLevelReward(
+      final reward = CoinRules.journeyLevelReward(
         guessesUsed: _guesses.length,
         maxGuesses: maxGuesses,
-      ));
+      );
+      await _coins.award(reward);
+      _analytics.logEvent(AnalyticsEvents.journeyLevelCompleted, {
+        AnalyticsParams.level: completedLevel,
+        AnalyticsParams.guessCount: _guesses.length,
+      });
+      _analytics.logEvent(AnalyticsEvents.coinsEarned, {
+        AnalyticsParams.amount: reward,
+        AnalyticsParams.source: AnalyticsSources.journeyLevel,
+      });
+      _analytics.syncJourney(_journeyLevel);
       _ads.maybeShowJourneyInterstitial();
     }
 
@@ -235,14 +315,25 @@ class GameController extends ChangeNotifier {
       _flash('Need ${CoinRules.hintCost} coins — tap the coin to watch & earn');
       return;
     }
-    _revealHint();
+    _analytics.logEvent(AnalyticsEvents.coinsSpent, {
+      AnalyticsParams.amount: CoinRules.hintCost,
+      AnalyticsParams.sink: AnalyticsSinks.hint,
+    });
+    _analytics.logEvent(
+        AnalyticsEvents.hintUsed, {AnalyticsParams.mode: _mode.name});
+    await _revealHint();
   }
 
-  void _revealHint() {
+  /// Reveals the first position not already solved by a guess. The selection
+  /// logic is unchanged; the reveal is now also STORED (and rendered) instead
+  /// of only flashing a message that a player could miss.
+  Future<void> _revealHint() async {
     for (var i = 0; i < wordLength; i++) {
       final solvedHere =
           _guesses.any((g) => g.length > i && g[i] == _answer[i]);
       if (!solvedHere) {
+        _revealed[i] = _answer[i];
+        await _storage.saveHints(_hintScope, _revealed);
         _flash('Hint: position ${i + 1} is "${_answer[i]}"');
         return;
       }
@@ -258,6 +349,10 @@ class GameController extends ChangeNotifier {
           'Need ${CoinRules.extraGuessCost} coins — tap the coin to watch & earn');
       return;
     }
+    _analytics.logEvent(AnalyticsEvents.coinsSpent, {
+      AnalyticsParams.amount: CoinRules.extraGuessCost,
+      AnalyticsParams.sink: AnalyticsSinks.extraGuess,
+    });
     _gameOver = false;
     _flash('Extra guess granted');
     notifyListeners();
@@ -270,6 +365,10 @@ class GameController extends ChangeNotifier {
       return;
     }
     await _coins.award(CoinRules.watchAdReward);
+    _analytics.logEvent(AnalyticsEvents.coinsEarned, {
+      AnalyticsParams.amount: CoinRules.watchAdReward,
+      AnalyticsParams.source: AnalyticsSources.watchAd,
+    });
     _flash('+${CoinRules.watchAdReward} coins!');
   }
 

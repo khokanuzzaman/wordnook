@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../branding.dart';
 import '../logic/coin_rules.dart';
+import '../services/analytics_service.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
 import 'how_to_play_sheet.dart';
@@ -10,6 +11,7 @@ import 'stats_sheet.dart';
 import 'widgets/board_grid.dart';
 import 'widgets/celebration_overlay.dart';
 import 'widgets/keyboard.dart';
+import 'widgets/mode_switcher.dart';
 
 class GameScreen extends StatefulWidget {
   final GameController controller;
@@ -49,8 +51,12 @@ class _GameScreenState extends State<GameScreen> {
     if (c.storage.onboardingSeen) return;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
-      await HowToPlaySheet.show(context);
+      AnalyticsService.instance.logEvent(AnalyticsEvents.onboardingStarted);
+      final completed = await HowToPlaySheet.show(context);
       await c.storage.setOnboardingSeen();
+      AnalyticsService.instance.logEvent(completed == true
+          ? AnalyticsEvents.onboardingCompleted
+          : AnalyticsEvents.onboardingSkipped);
     });
   }
 
@@ -93,10 +99,13 @@ class _GameScreenState extends State<GameScreen> {
     }
   }
 
-  void _toggleMode() {
+  void _setMode(GameMode mode) {
+    if (c.mode == mode) return;
     _endShown = false;
-    c.startGame(
-      c.mode == GameMode.daily ? GameMode.journey : GameMode.daily,
+    c.startGame(mode);
+    AnalyticsService.instance.logEvent(
+      AnalyticsEvents.modeSwitched,
+      {AnalyticsParams.to: mode.name},
     );
   }
 
@@ -128,16 +137,6 @@ class _GameScreenState extends State<GameScreen> {
                 ),
                 actions: [
                   _CoinChip(controller: c),
-                  TextButton(
-                    onPressed: _toggleMode,
-                    child: Text(
-                      isJourney ? 'Journey' : 'Daily',
-                      style: const TextStyle(
-                        color: AppPalette.correct,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
                   IconButton(
                     tooltip: 'Reveal a letter (costs coins)',
                     onPressed: c.gameOver ? null : c.useHint,
@@ -174,6 +173,8 @@ class _GameScreenState extends State<GameScreen> {
               body: SafeArea(
                 child: Column(
                   children: [
+                    const SizedBox(height: 8),
+                    ModeSwitcher(mode: c.mode, onChanged: _setMode),
                     if (isJourney) _JourneyBanner(controller: c),
                     const SizedBox(height: 8),
                     Expanded(child: BoardGrid(controller: c)),

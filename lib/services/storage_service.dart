@@ -23,11 +23,48 @@ class StorageService {
   static const _kHardMode = 'hard_mode'; // bool: revealed hints must be reused
   static const _kSelectedTheme = 'selected_theme'; // string theme id
   static const _kUnlockedThemes = 'unlocked_themes'; // csv of unlocked ids
+  static const _kDailyMapVersion =
+      'daily_map_version'; // int; which daily word-mapping produced the board
+  static const _kHintScope = 'hint_scope'; // which puzzle the reveals belong to
+  static const _kHintReveals = 'hint_reveals'; // csv of "index:letter"
+
+  /// Bumped whenever the daily word→date mapping changes, so boards saved under
+  /// an older mapping can be invalidated. v2 = shuffled permutation (v1, the
+  /// implicit default for existing installs, walked the alphabetical list).
+  static const int _dailyMappingVersion = 2;
 
   late final SharedPreferences _prefs;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
+    await _migrateDailyMapping();
+  }
+
+  /// One-time migration for the daily remap (alphabetical → shuffled).
+  ///
+  /// A board saved before the remap was played against a DIFFERENT word, so
+  /// restoring its guesses would render nonsense feedback. Detection: the
+  /// absence of [_kDailyMapVersion] means "written under the old mapping"
+  /// (fresh installs have no board either way, so this is a no-op for them).
+  ///
+  /// Deliberately narrow — stats, streak, broken-streak, coins, themes, journey
+  /// level and every setting are left untouched.
+  Future<void> _migrateDailyMapping() async {
+    if ((_prefs.getInt(_kDailyMapVersion) ?? 1) >= _dailyMappingVersion) return;
+
+    final wasDone = _prefs.getBool(_kDailyDone) ?? false;
+    // Guesses were played against the old word — always drop them.
+    await _prefs.remove(_kDailyGuesses);
+    if (!wasDone) {
+      // In-progress board: clear it so today restarts cleanly on the new word.
+      await _prefs.remove(_kDailyDate);
+      await _prefs.remove(_kDailyDone);
+    }
+    // A FINISHED daily keeps its date + done flag, so today stays locked. If we
+    // cleared them the player could replay today, and recordDailyResult would
+    // run a second time for the same date — which resets the streak to 1 and
+    // reports a bogus "missed day" break.
+    await _prefs.setInt(_kDailyMapVersion, _dailyMappingVersion);
   }
 
   // --- Stats ---------------------------------------------------------------
@@ -142,6 +179,45 @@ class StorageService {
     await _prefs.setString(_kDailyGuesses, guesses.join(','));
     await _prefs.setBool(_kDailyDone, done);
   }
+
+  // --- Revealed hints ------------------------------------------------------
+
+  /// Positions revealed by a purchased hint for [scope], as position → letter.
+  ///
+  /// Reveals are scoped to a single puzzle (a daily date, or a journey
+  /// level+attempt). If the stored scope doesn't match, they belong to a
+  /// different puzzle and are ignored — which is how they "expire".
+  Map<int, String> loadHints(String scope) {
+    if (_prefs.getString(_kHintScope) != scope) return const {};
+    final csv = _prefs.getString(_kHintReveals) ?? '';
+    if (csv.isEmpty) return const {};
+    final out = <int, String>{};
+    for (final part in csv.split(',')) {
+      final bits = part.split(':');
+      if (bits.length != 2) continue;
+      final i = int.tryParse(bits[0]);
+      if (i == null || bits[1].isEmpty) continue;
+      out[i] = bits[1];
+    }
+    return out;
+  }
+
+  Future<void> saveHints(String scope, Map<int, String> reveals) async {
+    await _prefs.setString(_kHintScope, scope);
+    final keys = reveals.keys.toList()..sort();
+    await _prefs.setString(
+      _kHintReveals,
+      keys.map((i) => '$i:${reveals[i]}').join(','),
+    );
+  }
+
+  Future<void> clearHints() async {
+    await _prefs.remove(_kHintScope);
+    await _prefs.remove(_kHintReveals);
+  }
+
+  /// UTC day key (yyyy-mm-dd), used to scope per-day state such as hints.
+  String todayKey([DateTime? now]) => _dayKey(now ?? DateTime.now());
 
   // --- Daily reminder settings --------------------------------------------
 
