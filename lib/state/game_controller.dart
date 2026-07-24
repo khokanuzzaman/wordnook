@@ -138,7 +138,9 @@ class GameController extends ChangeNotifier {
       _guesses.addAll(saved);
       if (_storage.isDailyDone()) {
         _gameOver = true;
-        _won = saved.isNotEmpty && saved.last == _answer;
+        // Read the stored outcome rather than inferring it from the guesses —
+        // inference reports a loss whenever the board isn't available.
+        _won = _storage.isDailyWon();
       }
       _analytics.logEvent(AnalyticsEvents.dailyStarted);
     } else {
@@ -232,6 +234,9 @@ class GameController extends ChangeNotifier {
     if (_mode == GameMode.daily) {
       await _storage.saveDailyProgress(guesses: _guesses, done: _gameOver);
       if (_gameOver) {
+        await _storage.saveDailyOutcome(won: _won);
+        // Captured before recording, because recordDailyResult claims the date.
+        final alreadyRecorded = _storage.isDailyRecorded();
         final prevStreak = _stats.currentStreak; // before recording
         _stats = await _storage.recordDailyResult(
           won: _won,
@@ -271,8 +276,13 @@ class GameController extends ChangeNotifier {
             AnalyticsParams.amount: reward,
             AnalyticsParams.source: AnalyticsSources.dailyWin,
           });
-          // Celebrate the streak once it's worth bragging about.
-          if (_stats.currentStreak >= 2) {
+          if (alreadyRecorded) {
+            // Won on a reopened board (rewarded extra guess). The day's result
+            // is already final, so don't imply the streak moved.
+            _message = '${_winMessage(_guesses.length)}  '
+                "Today's result was already recorded.";
+          } else if (_stats.currentStreak >= 2) {
+            // Celebrate the streak once it's worth bragging about.
             final milestone = CoinRules.isStreakMilestone(_stats.currentStreak);
             _message = '${_winMessage(_guesses.length)}  '
                 '${milestone ? '🔥🔥' : '🔥'} ${_stats.currentStreak}-day streak'

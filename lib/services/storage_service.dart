@@ -29,13 +29,15 @@ class StorageService {
   static const _kHintReveals = 'hint_reveals'; // csv of "index:letter"
   static const _kLastRecordedDate =
       'last_recorded_date'; // yyyy-mm-dd of the last recorded daily result
+  static const _kDailyWon = 'daily_won'; // bool: outcome of the saved board
 
   /// Storage schema version. Bumped whenever persisted state needs a one-time
   /// fix-up on upgrade.
   ///   v1 — implicit default for existing installs
   ///   v2 — daily word mapping changed (alphabetical → shuffled permutation)
   ///   v3 — backfill [_kLastRecordedDate] for the idempotency guard
-  static const int _schemaVersion = 3;
+  ///   v4 — backfill [_kDailyWon] so the outcome is stored, not inferred
+  static const int _schemaVersion = 4;
 
   late final SharedPreferences _prefs;
 
@@ -52,6 +54,7 @@ class StorageService {
     if (from >= _schemaVersion) return;
     if (from < 2) await _migrateToV2();
     if (from < 3) await _migrateToV3();
+    if (from < 4) await _migrateToV4();
     await _prefs.setInt(_kDailyMapVersion, _schemaVersion);
   }
 
@@ -85,6 +88,20 @@ class StorageService {
     if (done && date != null) {
       await _prefs.setString(_kLastRecordedDate, date);
     }
+  }
+
+  /// v4 — backfill [_kDailyWon].
+  ///
+  /// The outcome used to be inferred from the guess list, which is why clearing
+  /// a stale board in v2 produced a "you lost" screen for a day that was won.
+  /// For a finished board, the day was a win exactly when [_kLastWonDate] is
+  /// that same day — the only signal older data carries, and an accurate one.
+  Future<void> _migrateToV4() async {
+    if (_prefs.containsKey(_kDailyWon)) return;
+    if (!(_prefs.getBool(_kDailyDone) ?? false)) return;
+    final date = _prefs.getString(_kDailyDate);
+    if (date == null) return;
+    await _prefs.setBool(_kDailyWon, _prefs.getString(_kLastWonDate) == date);
   }
 
   // --- Stats ---------------------------------------------------------------
@@ -196,6 +213,29 @@ class StorageService {
     return _prefs.getString(_kDailyDate) == today &&
         (_prefs.getBool(_kDailyDone) ?? false);
   }
+
+  /// Whether today's finished board was a win.
+  ///
+  /// Stored explicitly rather than inferred from the guess list: inference
+  /// breaks whenever the guesses aren't available (e.g. after a migration
+  /// clears a stale board), which silently rendered a won day as a loss.
+  bool isDailyWon([DateTime? now]) {
+    final today = _dayKey(now ?? DateTime.now());
+    return _prefs.getString(_kDailyDate) == today &&
+        (_prefs.getBool(_kDailyWon) ?? false);
+  }
+
+  /// Records the outcome of today's finished board.
+  Future<void> saveDailyOutcome({required bool won, DateTime? now}) async {
+    await _prefs.setString(_kDailyDate, _dayKey(now ?? DateTime.now()));
+    await _prefs.setBool(_kDailyWon, won);
+  }
+
+  /// Whether a result has already been counted for today (see
+  /// [recordDailyResult]). Lets the UI explain that a later win on a reopened
+  /// board won't change the recorded result.
+  bool isDailyRecorded([DateTime? now]) =>
+      _prefs.getString(_kLastRecordedDate) == _dayKey(now ?? DateTime.now());
 
   /// Restores today's submitted guesses if the saved board is from today.
   List<String> loadDailyGuesses([DateTime? now]) {
