@@ -307,10 +307,38 @@ class GameController extends ChangeNotifier {
 
   // --- Rewarded features ---------------------------------------------------
 
-  /// Reveals one not-yet-solved position. Costs coins; if the player can't
+  /// The position a hint would reveal next: the first one not already solved by
+  /// a guess AND not already revealed by an earlier hint. Null when there is
+  /// nothing left to reveal — buying another hint would teach the player
+  /// nothing, so it must not be sold.
+  int? get _nextHintPosition {
+    for (var i = 0; i < wordLength; i++) {
+      if (_revealed.containsKey(i)) continue;
+      final solvedHere =
+          _guesses.any((g) => g.length > i && g[i] == _answer[i]);
+      if (!solvedHere) return i;
+    }
+    return null;
+  }
+
+  /// Whether buying a hint would actually reveal something new. Drives the
+  /// hint button's enabled state.
+  ///
+  /// Intentionally NOT gated on affordability: a player who can't pay should
+  /// still be able to tap and get nudged toward watch-to-earn.
+  bool get canUseHint => !_gameOver && _nextHintPosition != null;
+
+  /// Reveals one not-yet-known position. Costs coins; if the player can't
   /// afford it, they're nudged to the watch-to-earn action.
   Future<void> useHint() async {
     if (_gameOver) return;
+    // Resolve the target BEFORE spending — otherwise a hint with nothing left
+    // to reveal would charge for no information.
+    final position = _nextHintPosition;
+    if (position == null) {
+      _flash('Every letter is already revealed');
+      return;
+    }
     if (!await _coins.trySpend(CoinRules.hintCost)) {
       _flash('Need ${CoinRules.hintCost} coins — tap the coin to watch & earn');
       return;
@@ -321,24 +349,14 @@ class GameController extends ChangeNotifier {
     });
     _analytics.logEvent(
         AnalyticsEvents.hintUsed, {AnalyticsParams.mode: _mode.name});
-    await _revealHint();
+    await _revealAt(position);
   }
 
-  /// Reveals the first position not already solved by a guess. The selection
-  /// logic is unchanged; the reveal is now also STORED (and rendered) instead
-  /// of only flashing a message that a player could miss.
-  Future<void> _revealHint() async {
-    for (var i = 0; i < wordLength; i++) {
-      final solvedHere =
-          _guesses.any((g) => g.length > i && g[i] == _answer[i]);
-      if (!solvedHere) {
-        _revealed[i] = _answer[i];
-        await _storage.saveHints(_hintScope, _revealed);
-        _flash('Hint: position ${i + 1} is "${_answer[i]}"');
-        return;
-      }
-    }
-    _flash("You're very close!");
+  /// Records and persists the reveal at [i], then confirms it with a flash.
+  Future<void> _revealAt(int i) async {
+    _revealed[i] = _answer[i];
+    await _storage.saveHints(_hintScope, _revealed);
+    _flash('Hint: position ${i + 1} is "${_answer[i]}"');
   }
 
   /// Grants one extra guess beyond the normal max. Costs coins.

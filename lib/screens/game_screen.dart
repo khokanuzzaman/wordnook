@@ -138,8 +138,10 @@ class _GameScreenState extends State<GameScreen> {
                 actions: [
                   _CoinChip(controller: c),
                   IconButton(
-                    tooltip: 'Reveal a letter (costs coins)',
-                    onPressed: c.gameOver ? null : c.useHint,
+                    tooltip: c.canUseHint
+                        ? 'Reveal a letter (costs coins)'
+                        : 'Nothing left to reveal',
+                    onPressed: c.canUseHint ? c.useHint : null,
                     icon: const Icon(Icons.lightbulb_outline),
                   ),
                   IconButton(
