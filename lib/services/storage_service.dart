@@ -24,34 +24,42 @@ class StorageService {
   static const _kSelectedTheme = 'selected_theme'; // string theme id
   static const _kUnlockedThemes = 'unlocked_themes'; // csv of unlocked ids
   static const _kDailyMapVersion =
-      'daily_map_version'; // int; which daily word-mapping produced the board
+      'daily_map_version'; // int; storage schema version (see _schemaVersion)
   static const _kHintScope = 'hint_scope'; // which puzzle the reveals belong to
   static const _kHintReveals = 'hint_reveals'; // csv of "index:letter"
+  static const _kLastRecordedDate =
+      'last_recorded_date'; // yyyy-mm-dd of the last recorded daily result
 
-  /// Bumped whenever the daily word→date mapping changes, so boards saved under
-  /// an older mapping can be invalidated. v2 = shuffled permutation (v1, the
-  /// implicit default for existing installs, walked the alphabetical list).
-  static const int _dailyMappingVersion = 2;
+  /// Storage schema version. Bumped whenever persisted state needs a one-time
+  /// fix-up on upgrade.
+  ///   v1 — implicit default for existing installs
+  ///   v2 — daily word mapping changed (alphabetical → shuffled permutation)
+  ///   v3 — backfill [_kLastRecordedDate] for the idempotency guard
+  static const int _schemaVersion = 3;
 
   late final SharedPreferences _prefs;
 
   Future<void> init() async {
     _prefs = await SharedPreferences.getInstance();
-    await _migrateDailyMapping();
+    await _migrate();
   }
 
-  /// One-time migration for the daily remap (alphabetical → shuffled).
+  /// Runs the one-time upgrade steps, in order, for whatever version this
+  /// install is on. Deliberately narrow — no step may touch stats, streak,
+  /// coins, themes, journey level or any setting.
+  Future<void> _migrate() async {
+    final from = _prefs.getInt(_kDailyMapVersion) ?? 1;
+    if (from >= _schemaVersion) return;
+    if (from < 2) await _migrateToV2();
+    if (from < 3) await _migrateToV3();
+    await _prefs.setInt(_kDailyMapVersion, _schemaVersion);
+  }
+
+  /// v2 — the daily remap (alphabetical → shuffled).
   ///
   /// A board saved before the remap was played against a DIFFERENT word, so
-  /// restoring its guesses would render nonsense feedback. Detection: the
-  /// absence of [_kDailyMapVersion] means "written under the old mapping"
-  /// (fresh installs have no board either way, so this is a no-op for them).
-  ///
-  /// Deliberately narrow — stats, streak, broken-streak, coins, themes, journey
-  /// level and every setting are left untouched.
-  Future<void> _migrateDailyMapping() async {
-    if ((_prefs.getInt(_kDailyMapVersion) ?? 1) >= _dailyMappingVersion) return;
-
+  /// restoring its guesses would render nonsense feedback.
+  Future<void> _migrateToV2() async {
     final wasDone = _prefs.getBool(_kDailyDone) ?? false;
     // Guesses were played against the old word — always drop them.
     await _prefs.remove(_kDailyGuesses);
@@ -60,11 +68,23 @@ class StorageService {
       await _prefs.remove(_kDailyDate);
       await _prefs.remove(_kDailyDone);
     }
-    // A FINISHED daily keeps its date + done flag, so today stays locked. If we
-    // cleared them the player could replay today, and recordDailyResult would
-    // run a second time for the same date — which resets the streak to 1 and
-    // reports a bogus "missed day" break.
-    await _prefs.setInt(_kDailyMapVersion, _dailyMappingVersion);
+    // A FINISHED daily keeps its date + done flag, so today stays locked.
+  }
+
+  /// v3 — backfill [_kLastRecordedDate].
+  ///
+  /// The idempotency guard in [recordDailyResult] is new, so nobody upgrading
+  /// has the key. Without this, someone who already completed today's daily on
+  /// an older build could still double-record today. A finished board means the
+  /// result for that date was already written, so the date is derivable — no
+  /// guessing and nothing destructive.
+  Future<void> _migrateToV3() async {
+    if (_prefs.getString(_kLastRecordedDate) != null) return;
+    final done = _prefs.getBool(_kDailyDone) ?? false;
+    final date = _prefs.getString(_kDailyDate);
+    if (done && date != null) {
+      await _prefs.setString(_kLastRecordedDate, date);
+    }
   }
 
   // --- Stats ---------------------------------------------------------------
@@ -85,12 +105,26 @@ class StorageService {
 
   /// Records a finished DAILY game and updates streak + distribution.
   /// [guessesUsed] is 1..maxGuesses on a win, or null on a loss.
+  ///
+  /// IDEMPOTENT PER UTC DATE: a date's result is recorded exactly once, and the
+  /// first result for a date is final. Any later call for the same date is a
+  /// complete no-op — stats, streak, [_kLastWonDate] and [_kBrokenStreak] are
+  /// all left alone.
+  ///
+  /// Without this, a second call for the same day (a rewarded extra guess
+  /// re-completing a finished daily) silently corrupted the streak: with
+  /// [_kLastWonDate] already set to today, the "consecutive day" test fails, so
+  /// the streak collapses to 1 and a bogus broken-streak is reported. Streak and
+  /// stats are the one thing a player cannot restore themselves, so this is
+  /// enforced at the write, not at the call sites.
   Future<GameStats> recordDailyResult({
     required bool won,
     int? guessesUsed,
     DateTime? now,
   }) async {
     final today = _dayKey(now ?? DateTime.now());
+    if (_prefs.getString(_kLastRecordedDate) == today) return loadStats();
+
     var s = loadStats();
     final prevStreak = s.currentStreak;
 
@@ -128,6 +162,8 @@ class StorageService {
       guessDistribution: dist,
     );
     await _saveStats(s);
+    // Claim this date so no later call can rewrite it.
+    await _prefs.setString(_kLastRecordedDate, today);
     return s;
   }
 
