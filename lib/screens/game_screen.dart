@@ -287,8 +287,9 @@ class _EndActions extends StatelessWidget {
     if (!c.gameOver) return const SizedBox(height: 8);
 
     final buttons = <Widget>[];
-    // Offer a rewarded extra guess on a loss (both modes).
-    if (!c.won) {
+    // Offer a rewarded extra guess on a loss (both modes) — but only when
+    // there are guesses to extend.
+    if (!c.won && c.guesses.isNotEmpty) {
       buttons.add(
         OutlinedButton.icon(
           onPressed: onExtraGuess,

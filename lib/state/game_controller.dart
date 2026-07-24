@@ -372,6 +372,10 @@ class GameController extends ChangeNotifier {
   /// Grants one extra guess beyond the normal max. Costs coins.
   Future<void> useExtraGuess() async {
     if (!_gameOver || _won) return;
+    // An "extra" guess on a board with no guesses is meaningless — there is
+    // nothing to extend. Reachable when a finished board has no guesses to
+    // restore, and never worth charging for.
+    if (_guesses.isEmpty) return;
     if (!await _coins.trySpend(CoinRules.extraGuessCost)) {
       _flash(
           'Need ${CoinRules.extraGuessCost} coins — tap the coin to watch & earn');
