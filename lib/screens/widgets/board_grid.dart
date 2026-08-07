@@ -5,66 +5,108 @@ import '../../models/letter_status.dart';
 import '../../state/game_controller.dart';
 import 'letter_tile.dart';
 
-class BoardGrid extends StatelessWidget {
+/// The real game board (redesign §2). Marks the next unplayed row as the active
+/// row (amber ring), shows a pulsing caret on its first empty cell, and washes
+/// submitted rows in. Reuses [LetterTile].
+class BoardGrid extends StatefulWidget {
   final GameController controller;
   const BoardGrid({super.key, required this.controller});
 
   @override
-  Widget build(BuildContext context) {
-    final c = controller;
-    final rows = <Widget>[];
+  State<BoardGrid> createState() => _BoardGridState();
+}
 
-    // Normally maxGuesses rows; if a rewarded extra guess re-opened the game
-    // past the limit, grow to fit the new active row.
+class _BoardGridState extends State<BoardGrid>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulse = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 1100),
+    value: 1,
+  );
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    // Honour reduced motion: only run the caret/ring breathe when animations
+    // are enabled (also keeps pumpAndSettle from hanging in tests).
+    final reduce = MediaQuery.of(context).disableAnimations;
+    if (reduce) {
+      _pulse
+        ..stop()
+        ..value = 1;
+    } else if (!_pulse.isAnimating) {
+      _pulse.repeat(reverse: true);
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulse.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final reduce = MediaQuery.of(context).disableAnimations;
+    final c = widget.controller;
     final rowCount = math.max(
       GameController.maxGuesses,
       c.guesses.length + (c.gameOver ? 0 : 1),
     );
+    final activeRow = c.gameOver ? -1 : c.guesses.length;
+    final caretCol = c.current.length; // first empty cell in the active row
 
-    for (var row = 0; row < rowCount; row++) {
-      String letters;
-      List<LetterStatus>? statuses;
-      var isActiveRow = false;
+    return AnimatedBuilder(
+      animation: _pulse,
+      builder: (context, _) {
+        final pulse = reduce ? 1.0 : _pulse.value;
+        return Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              for (var row = 0; row < rowCount; row++)
+                _row(c, row, activeRow, caretCol, pulse, !reduce),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-      if (row < c.guesses.length) {
-        letters = c.guesses[row];
-        statuses = c.statusesFor(letters);
-      } else if (row == c.guesses.length && !c.gameOver) {
-        letters = c.current.padRight(c.wordLength);
-        statuses = null;
-        isActiveRow = true;
-      } else {
-        letters = ' ' * c.wordLength;
-        statuses = null;
-      }
-
-      rows.add(
-        Row(
-          mainAxisSize: MainAxisSize.min,
-          children: List.generate(c.wordLength, (col) {
-            final ch = col < letters.length ? letters[col] : ' ';
-            final st = statuses == null ? LetterStatus.empty : statuses[col];
-            // A purchased hint shows as a ghost letter in the row you're
-            // typing, until you actually type over that position.
-            final hint = c.revealedHints[col];
-            final showHint = isActiveRow && ch.trim().isEmpty && hint != null;
-            // Key flips from "empty" to "revealed" on submit, remounting the
-            // tile so its reveal animation plays exactly once.
-            return LetterTile(
-              key: ValueKey('$row-$col-'
-                  '${st == LetterStatus.empty ? 'e' : 'r'}${showHint ? 'h' : ''}'),
-              letter: showHint ? hint : ch.trim(),
-              status: st,
-              column: col,
-              isHint: showHint,
-            );
-          }),
-        ),
-      );
+  Widget _row(GameController c, int row, int activeRow, int caretCol,
+      double pulse, bool animate) {
+    String letters;
+    List<LetterStatus>? statuses;
+    if (row < c.guesses.length) {
+      letters = c.guesses[row];
+      statuses = c.statusesFor(letters);
+    } else if (row == activeRow) {
+      letters = c.current.padRight(c.wordLength);
+      statuses = null;
+    } else {
+      letters = ' ' * c.wordLength;
+      statuses = null;
     }
+    final isActive = row == activeRow;
 
-    return Center(
-      child: Column(mainAxisSize: MainAxisSize.min, children: rows),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(c.wordLength, (col) {
+        final ch = col < letters.length ? letters[col] : ' ';
+        final st = statuses == null ? LetterStatus.empty : statuses[col];
+        final showCaret =
+            isActive && col == caretCol && caretCol < c.wordLength;
+        return LetterTile(
+          key: ValueKey('$row-$col-${st == LetterStatus.empty ? 'e' : 'r'}'),
+          letter: ch.trim(),
+          status: st,
+          column: col,
+          animate: animate,
+          isActiveRow: isActive,
+          showCaret: showCaret,
+          pulse: pulse,
+        );
+      }),
     );
   }
 }

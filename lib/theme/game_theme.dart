@@ -35,14 +35,15 @@ class GameTheme {
 class ThemeRegistry {
   ThemeRegistry._();
 
-  /// Default brand look (teal / amber / slate). Free.
+  /// Default brand look — warm cozy teal / amber / warm-grey (redesign spec §1).
+  /// Free. Base colours; the tile renders a subtle vertical gradient around each.
   static const cozy = GameTheme(
     id: 'cozy',
     name: 'Cozy',
     cost: 0,
-    correct: Color(0xFF2A9D8F), // teal
-    present: Color(0xFFE9A23B), // amber
-    absent: Color(0xFF3A3F44), // slate
+    correct: Color(0xFF4F9B8E), // teal  (gradient ≈ #5AA99B→#4A9184)
+    present: Color(0xFFE0A857), // amber (gradient ≈ #EBBB73→#D89F4E)
+    absent: Color(0xFF2E2924), // warm grey (gradient ≈ #34302A→#28231E)
   );
 
   /// Teal-leaning green + clay orange + bark brown. NOT green/yellow/gray:

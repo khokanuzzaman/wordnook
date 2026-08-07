@@ -61,6 +61,24 @@ class GameController extends ChangeNotifier {
   int _journeyLevel = 1;
   int get journeyLevel => _journeyLevel;
 
+  /// The published 1-based daily puzzle number (presentation only).
+  ///
+  /// Snapshotted in [startGame] from the SAME instant the daily word is chosen,
+  /// so the header number always matches the puzzle on screen — even if the app
+  /// is left open across UTC midnight. It advances the next time the daily is
+  /// (re)started, in lockstep with the word.
+  int get dailyNumber => _dailyNumber;
+
+  /// True when we're on Daily and the UTC date has advanced past the loaded
+  /// puzzle — i.e. the app was open across midnight and the daily is now stale.
+  /// The UI uses this on resume to roll the puzzle over live.
+  bool get dailyNeedsRefresh =>
+      _mode == GameMode.daily && _words.dailyNumber() != _dailyNumber;
+
+  /// Journey chapter for the current level: 10 levels per chapter (1–10 → 1,
+  /// 11–20 → 2, …). Presentation only — no persisted chapter model.
+  int get journeyChapter => ((_journeyLevel - 1) ~/ 10) + 1;
+
   // Within-session retry counter for the current Journey level. Each retry
   // after a loss shows a different word (but the level number is unchanged).
   int _journeyAttempt = 0;
@@ -80,6 +98,7 @@ class GameController extends ChangeNotifier {
   }
 
   String _answer = '';
+  int _dailyNumber = 0; // snapshot of the loaded daily's puzzle number
   final List<String> _guesses = [];
   String _current = '';
   bool _gameOver = false;
@@ -129,7 +148,11 @@ class GameController extends ChangeNotifier {
     _dailyResultLogged = false;
 
     if (mode == GameMode.daily) {
-      _answer = _words.dailyWord();
+      // Choose the word and its published number from ONE instant, so the
+      // header can never show a different day than the puzzle on screen.
+      final now = DateTime.now();
+      _answer = _words.dailyWord(now);
+      _dailyNumber = _words.dailyNumber(now);
       // Restore today's progress if it exists.
       final saved = _storage.loadDailyGuesses();
       for (final g in saved) {

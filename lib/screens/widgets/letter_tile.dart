@@ -1,23 +1,32 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 import '../../models/letter_status.dart';
 import '../../theme/app_theme.dart';
 
-/// A single board tile. Submitted tiles (status != empty) flip in with a short
-/// staggered reveal; empty tiles render statically and "pop" when a letter is
-/// typed in.
+/// A single board tile (redesign §2). Submitted tiles wash in with a short
+/// staggered reveal; the active row shows an amber ring, and its first empty
+/// cell shows a pulsing caret. Reused by both the real board and the tutorial.
 class LetterTile extends StatefulWidget {
   final String letter;
   final LetterStatus status;
 
-  /// Column index, used to stagger the reveal flip across a row.
+  /// Column index, used to stagger the reveal across a row.
   final int column;
 
-  /// True when this letter was GIVEN by a purchased hint rather than typed.
-  /// Renders as a translucent "ghost" letter in an outlined tile, so it reads
-  /// as a clue you own — distinct from both a typed letter and a solved tile.
+  /// True when this letter was GIVEN by a purchased hint (ghost styling).
   final bool isHint;
+
+  /// When false, the reveal wash / typing pop are skipped (reduced motion).
+  final bool animate;
+
+  /// True for the next row to play — draws the amber "start here / keep going"
+  /// ring on un-typed cells.
+  final bool isActiveRow;
+
+  /// True for the single active-row cell that should show the caret.
+  final bool showCaret;
+
+  /// 0..1 breathe value for the caret / active ring (1 = static).
+  final double pulse;
 
   const LetterTile({
     super.key,
@@ -25,7 +34,15 @@ class LetterTile extends StatefulWidget {
     required this.status,
     this.column = 0,
     this.isHint = false,
+    this.animate = true,
+    this.isActiveRow = false,
+    this.showCaret = false,
+    this.pulse = 1.0,
   });
+
+  static const double size = 54;
+  static const double gap = 8;
+  static const double pitch = size + gap; // 62
 
   @override
   State<LetterTile> createState() => _LetterTileState();
@@ -38,26 +55,27 @@ class _LetterTileState extends State<LetterTile>
     duration: const Duration(milliseconds: 320),
   );
 
-  bool get _revealed => widget.status != LetterStatus.empty;
+  bool get _scored => widget.status != LetterStatus.empty;
 
   @override
   void initState() {
     super.initState();
-    if (_revealed) {
-      // Stagger each column so the row reveals left-to-right.
+    if (_scored && widget.animate) {
       Future.delayed(Duration(milliseconds: 90 * widget.column), () {
         if (mounted) _controller.forward();
       });
     } else {
-      _controller.value = 1; // empty tiles are fully "settled".
+      _controller.value = 1;
     }
   }
 
   @override
   void didUpdateWidget(covariant LetterTile old) {
     super.didUpdateWidget(old);
-    // A letter typed into an empty tile gives a quick pop.
-    if (!_revealed && widget.letter.isNotEmpty && old.letter != widget.letter) {
+    if (!_scored &&
+        widget.animate &&
+        widget.letter.isNotEmpty &&
+        old.letter != widget.letter) {
       _controller
         ..value = 0
         ..forward();
@@ -72,62 +90,117 @@ class _LetterTileState extends State<LetterTile>
 
   @override
   Widget build(BuildContext context) {
-    final color = AppPalette.forStatus(widget.status);
-    final isEmpty = widget.status == LetterStatus.empty;
-    // Hint accent tracks the active board theme's "correct" colour.
-    final hintColor = AppPalette.forStatus(LetterStatus.correct);
+    final hasLetter = widget.letter.isNotEmpty;
+    final typed = !_scored && hasLetter;
+
+    late final BoxDecoration decoration;
+    late final Color glyphColor;
+
+    if (_scored) {
+      decoration = BoxDecoration(
+        gradient: LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: AppPalette.statusGradient(widget.status)),
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: widget.status == LetterStatus.absent
+            ? null
+            : const [
+                BoxShadow(
+                    color: Color(0x47000000),
+                    blurRadius: 10,
+                    offset: Offset(0, 3))
+              ],
+      );
+      glyphColor = AppPalette.statusGlyph(widget.status);
+    } else if (typed) {
+      decoration = BoxDecoration(
+        gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [Color(0xFF3F3830), Color(0xFF322C25)]),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0x1FF4F1EC), width: 1),
+      );
+      glyphColor = AppPalette.ink;
+    } else if (widget.isActiveRow) {
+      decoration = BoxDecoration(
+        gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppPalette.activeTop, AppPalette.activeBottom]),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+            color: AppPalette.activeRing
+                .withValues(alpha: 0.38 * (0.7 + 0.3 * widget.pulse)),
+            width: 1.5),
+      );
+      glyphColor = AppPalette.ink;
+    } else {
+      decoration = BoxDecoration(
+        gradient: const LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            colors: [AppPalette.emptyTop, AppPalette.emptyBottom]),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0x0AFFF0DC), width: 1),
+      );
+      glyphColor = AppPalette.ink;
+    }
+
+    final Widget child = Container(
+      width: LetterTile.size,
+      height: LetterTile.size,
+      margin: const EdgeInsets.all(LetterTile.gap / 2),
+      decoration: decoration,
+      alignment: Alignment.center,
+      child: widget.showCaret && !hasLetter && !_scored
+          ? _caret()
+          : Text(
+              widget.letter.toUpperCase(),
+              style: AppType.fredoka(
+                fontSize: 26,
+                fontWeight: FontWeight.w600,
+                color: widget.isHint
+                    ? AppPalette.forStatus(LetterStatus.correct)
+                        .withValues(alpha: 0.55)
+                    : glyphColor,
+              ),
+            ),
+    );
 
     return AnimatedBuilder(
       animation: _controller,
-      builder: (context, child) {
-        if (_revealed) {
-          // Flip around the X axis: the tile rotates in to reveal its colour.
-          final t = Curves.easeOutBack.transform(_controller.value);
-          final angle = (1 - t) * (math.pi / 2);
-          return Transform(
-            alignment: Alignment.center,
-            transform: Matrix4.identity()
-              ..setEntry(3, 2, 0.001)
-              ..rotateX(angle),
-            child: child,
+      builder: (context, c) {
+        if (_scored) {
+          // Gentle warm colour wash (a soft scale-in rather than a hard flip).
+          final t = Curves.easeOut.transform(_controller.value);
+          return Opacity(
+            opacity: t,
+            child: Transform.scale(scale: 0.86 + 0.14 * t, child: c),
           );
         }
-        // Typing pop: subtle scale from a keystroke.
-        final scale = isEmpty && widget.letter.isNotEmpty
-            ? 0.9 + 0.1 * _controller.value
-            : 1.0;
-        return Transform.scale(scale: scale, child: child);
+        final scale = typed ? 0.9 + 0.1 * _controller.value : 1.0;
+        return Transform.scale(scale: scale, child: c);
       },
-      child: Container(
-        width: 52,
-        height: 52,
-        margin: const EdgeInsets.all(3),
-        decoration: BoxDecoration(
-          color: color,
-          borderRadius: BorderRadius.circular(6),
-          border: Border.all(
-            color: widget.isHint
-                ? hintColor
-                : isEmpty
-                    ? (widget.letter.isNotEmpty
-                        ? AppPalette.keyIdle
-                        : AppPalette.border)
-                    : color,
-            width: 2,
-          ),
-        ),
-        alignment: Alignment.center,
-        child: Text(
-          widget.letter.toUpperCase(),
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            // Given, not guessed: translucent accent instead of solid white.
-            color: widget.isHint
-                ? hintColor.withValues(alpha: 0.55)
-                : Colors.white,
-          ),
-        ),
+      child: child,
+    );
+  }
+
+  Widget _caret() {
+    final o = (0.4 + 0.6 * widget.pulse).clamp(0.0, 1.0);
+    return Container(
+      width: 3,
+      height: 26,
+      decoration: BoxDecoration(
+        color: AppPalette.caret.withValues(alpha: o),
+        borderRadius: BorderRadius.circular(2),
+        boxShadow: [
+          BoxShadow(
+              color: AppPalette.caret.withValues(alpha: 0.5 * o),
+              blurRadius: 10,
+              spreadRadius: 1),
+        ],
       ),
     );
   }
