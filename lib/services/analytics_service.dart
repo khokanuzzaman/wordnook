@@ -12,7 +12,7 @@ import '../logic/analytics_buckets.dart';
 /// your own debug/test sessions stop flowing into the production Analytics
 /// property and skewing retention for a small user base. Release builds are
 /// unaffected — they always report.
-const bool kAnalyticsEnabledInDebug = true;
+const bool kAnalyticsEnabledInDebug = false;
 
 /// The slice of analytics the app depends on. Kept narrow so tests can use a
 /// no-op fake and so no call site ever touches Firebase directly.
@@ -33,6 +33,7 @@ class AnalyticsEvents {
   static const onboardingStarted = 'onboarding_started';
   static const onboardingCompleted = 'onboarding_completed';
   static const onboardingSkipped = 'onboarding_skipped';
+  static const onboardingStepReached = 'onboarding_step_reached';
 
   // Daily mode.
   static const dailyStarted = 'daily_started';
@@ -80,6 +81,7 @@ class AnalyticsParams {
   static const themeId = 'theme_id';
   static const enabled = 'enabled';
   static const to = 'to';
+  static const step = 'step';
 }
 
 /// Enum-like values for coin `source` (coins_earned).
@@ -96,6 +98,15 @@ class AnalyticsSinks {
   static const hint = 'hint';
   static const extraGuess = 'extra_guess';
   static const theme = 'theme';
+}
+
+/// Enum-like values for onboarding_step_reached `step`.
+class AnalyticsOnboardingSteps {
+  const AnalyticsOnboardingSteps._();
+  static const invite = 'invite';
+  static const reveal = 'reveal';
+  static const solve = 'solve';
+  static const win = 'win';
 }
 
 /// Enum-like values for streak_broken `reason`.

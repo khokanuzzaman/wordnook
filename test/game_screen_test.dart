@@ -51,7 +51,13 @@ void main() {
         ads: _FakeAds());
 
     await tester
-        .pumpWidget(MaterialApp(home: GameScreen(controller: controller)));
+        .pumpWidget(MaterialApp(
+      home: GameScreen(controller: controller),
+      builder: (context, w) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: w!,
+      ),
+    ));
     // Let the post-frame callback + the 700ms reveal delay elapse, then settle
     // the bottom-sheet animation.
     await tester.pump();
@@ -59,7 +65,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('Statistics'), findsOneWidget);
-    expect(find.text('Guess distribution'), findsOneWidget);
+    expect(find.text('GUESS DISTRIBUTION'), findsOneWidget);
   });
 
   testWidgets('winning the daily shows the celebration overlay',
@@ -84,7 +90,13 @@ void main() {
         ads: _FakeAds());
 
     await tester
-        .pumpWidget(MaterialApp(home: GameScreen(controller: controller)));
+        .pumpWidget(MaterialApp(
+      home: GameScreen(controller: controller),
+      builder: (context, w) => MediaQuery(
+        data: MediaQuery.of(context).copyWith(disableAnimations: true),
+        child: w!,
+      ),
+    ));
     await tester.pump();
 
     // Solve today's word in one guess.

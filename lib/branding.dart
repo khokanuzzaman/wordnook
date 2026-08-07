@@ -4,4 +4,13 @@
 class Branding {
   static const String appName = 'Wordnook';
   static const String appTagline = 'A fresh 5-letter puzzle every day.';
+
+  /// User-facing version string shown on the About screen. Keep in sync with
+  /// the `version:` name in pubspec.yaml (no runtime package-info dependency).
+  static const String version = '0.1.0';
+
+  /// Longer About-screen description of the app's calm, cozy positioning.
+  static const String appDescription =
+      'A cozy daily word puzzle. One warm little word a day — no timers, no '
+      'scores, just a quiet moment to think.';
 }
