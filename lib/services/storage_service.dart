@@ -37,7 +37,8 @@ class StorageService {
   ///   v2 — daily word mapping changed (alphabetical → shuffled permutation)
   ///   v3 — backfill [_kLastRecordedDate] for the idempotency guard
   ///   v4 — backfill [_kDailyWon] so the outcome is stored, not inferred
-  static const int _schemaVersion = 4;
+  ///   v5 — backfill [_kOnboardingSeen] for existing players (new tutorial)
+  static const int _schemaVersion = 5;
 
   late final SharedPreferences _prefs;
 
@@ -55,6 +56,7 @@ class StorageService {
     if (from < 2) await _migrateToV2();
     if (from < 3) await _migrateToV3();
     if (from < 4) await _migrateToV4();
+    if (from < 5) await _migrateToV5();
     await _prefs.setInt(_kDailyMapVersion, _schemaVersion);
   }
 
@@ -102,6 +104,40 @@ class StorageService {
     final date = _prefs.getString(_kDailyDate);
     if (date == null) return;
     await _prefs.setBool(_kDailyWon, _prefs.getString(_kLastWonDate) == date);
+  }
+
+  /// v5 — backfill [_kOnboardingSeen] for existing players.
+  ///
+  /// The interactive tutorial is new. An upgrading player already knows the
+  /// game and must never be dropped into it. If the device carries ANY prior
+  /// gameplay state but no onboarding flag, mark onboarding as seen. A genuinely
+  /// fresh install (no state, no flag) is left untouched so it still gets the
+  /// tutorial.
+  ///
+  /// Only gameplay-produced signals count — [_kDailyMapVersion] is written by
+  /// the migration itself and is deliberately NOT treated as prior state.
+  Future<void> _migrateToV5() async {
+    if (_prefs.getBool(_kOnboardingSeen) ?? false) return;
+    if (_hasPriorGameState()) {
+      await _prefs.setBool(_kOnboardingSeen, true);
+    }
+  }
+
+  /// True if the device shows any sign of prior play (used only by the v5
+  /// onboarding backfill).
+  bool _hasPriorGameState() {
+    final s = loadStats();
+    if (s.gamesPlayed > 0 || s.currentStreak > 0 || s.bestStreak > 0) {
+      return true;
+    }
+    if (_prefs.getString(_kLastWonDate) != null) return true; // won a daily
+    if (_prefs.getString(_kDailyDate) != null) return true; // played a daily
+    if (_prefs.getString(_kLastRecordedDate) != null) return true;
+    if ((_prefs.getInt(_kJourneyLevel) ?? 1) > 1) return true; // journey progress
+    if ((_prefs.getInt(_kCoins) ?? 0) > 0) return true; // earned coins
+    if ((_prefs.getString(_kUnlockedThemes) ?? '').isNotEmpty) return true;
+    if (_prefs.getString(_kSelectedTheme) != null) return true; // picked a theme
+    return false;
   }
 
   // --- Stats ---------------------------------------------------------------
@@ -313,6 +349,28 @@ class StorageService {
 
   bool get onboardingSeen => _prefs.getBool(_kOnboardingSeen) ?? false;
   Future<void> setOnboardingSeen() => _prefs.setBool(_kOnboardingSeen, true);
+
+  /// Seeds the real streak from a WON tutorial: the tutorial counts as today's
+  /// streak-day, so the win screen's "1" is truthful and tomorrow's daily win
+  /// makes it two.
+  ///
+  /// Sets currentStreak/bestStreak and marks [_kLastWonDate] = today. Does NOT
+  /// touch gamesPlayed/gamesWon/distribution, [_kLastRecordedDate], the daily
+  /// board, or coins — so today's real daily is still fully playable and still
+  /// counts. No-op if a streak already exists (defensive; onboarding runs once).
+  Future<GameStats> beginStreakFromOnboarding({DateTime? now}) async {
+    final today = _dayKey(now ?? DateTime.now());
+    var s = loadStats();
+    if (s.currentStreak < 1) {
+      s = s.copyWith(
+        currentStreak: 1,
+        bestStreak: s.bestStreak < 1 ? 1 : s.bestStreak,
+      );
+      await _saveStats(s);
+    }
+    await _prefs.setString(_kLastWonDate, today);
+    return s;
+  }
 
   // --- Journey progression -------------------------------------------------
 

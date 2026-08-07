@@ -54,7 +54,11 @@ Future<void> main() async {
 Future<void> _setUpDailyReminder(StorageService storage) async {
   await NotificationService.instance.init();
   if (storage.reminderEnabled) {
-    await NotificationService.instance.requestPermissions();
+    // Do NOT request the notification permission here — that would pop a native
+    // prompt over first-run onboarding. Permission is only ever requested at an
+    // explicit opt-in (onboarding "Turn on" or the Settings toggle). Scheduling
+    // without permission is harmless: it just won't deliver until granted, and
+    // already-granted users keep their reminder.
     await NotificationService.instance.scheduleDailyReminder(
       hour: storage.reminderHour,
       minute: storage.reminderMinute,

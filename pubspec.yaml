@@ -27,3 +27,12 @@ flutter:
   assets:
     - assets/words/answers.txt
     - assets/words/allowed.txt
+  # Bundled so fonts render fully offline with no first-launch pop-in. These are
+  # variable fonts; Flutter applies the weight axis from TextStyle.fontWeight.
+  fonts:
+    - family: Fredoka
+      fonts:
+        - asset: assets/fonts/Fredoka-Variable.ttf
+    - family: Nunito
+      fonts:
+        - asset: assets/fonts/Nunito-Variable.ttf
