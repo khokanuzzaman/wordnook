@@ -5,13 +5,16 @@ import '../logic/coin_rules.dart';
 import '../services/analytics_service.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
-import 'how_to_play_sheet.dart';
-import 'settings_screen.dart';
-import 'stats_sheet.dart';
+import 'statistics_screen.dart';
+import 'widgets/app_drawer.dart';
 import 'widgets/board_grid.dart';
+import 'widgets/board_info_bar.dart';
 import 'widgets/celebration_overlay.dart';
+import 'widgets/cozy_background.dart';
+import 'widgets/identity_header.dart';
 import 'widgets/keyboard.dart';
 import 'widgets/mode_switcher.dart';
+import 'widgets/toast.dart';
 
 class GameScreen extends StatefulWidget {
   final GameController controller;
@@ -21,15 +24,15 @@ class GameScreen extends StatefulWidget {
   State<GameScreen> createState() => _GameScreenState();
 }
 
-class _GameScreenState extends State<GameScreen> {
+class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   GameController get c => widget.controller;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     c.startGame(GameMode.daily);
     c.addListener(_onChange);
-    _maybeOnboard();
     // A returning player whose daily is already finished should still see the
     // stats sheet — startGame ran before the listener was attached, so handle
     // that initial game-over case explicitly.
@@ -41,23 +44,21 @@ class _GameScreenState extends State<GameScreen> {
   }
 
   @override
-  void dispose() {
-    c.removeListener(_onChange);
-    super.dispose();
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    // Roll the daily over live: if the app was open across UTC midnight, reload
+    // the new day's puzzle (and its number) on resume instead of showing a
+    // stale board.
+    if (state == AppLifecycleState.resumed && c.dailyNeedsRefresh) {
+      _endShown = false;
+      c.startGame(GameMode.daily);
+    }
   }
 
-  /// Show the how-to-play sheet once, on first ever launch.
-  void _maybeOnboard() {
-    if (c.storage.onboardingSeen) return;
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      if (!mounted) return;
-      AnalyticsService.instance.logEvent(AnalyticsEvents.onboardingStarted);
-      final completed = await HowToPlaySheet.show(context);
-      await c.storage.setOnboardingSeen();
-      AnalyticsService.instance.logEvent(completed == true
-          ? AnalyticsEvents.onboardingCompleted
-          : AnalyticsEvents.onboardingSkipped);
-    });
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    c.removeListener(_onChange);
+    super.dispose();
   }
 
   void _onChange() {
@@ -65,14 +66,8 @@ class _GameScreenState extends State<GameScreen> {
     // end-of-game flow to fire again next time.
     if (!c.gameOver) _endShown = false;
 
-    final msg = c.message;
-    if (msg != null && mounted) {
-      ScaffoldMessenger.of(context).removeCurrentSnackBar();
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(msg), duration: const Duration(seconds: 2)),
-      );
-      c.clearMessage();
-    }
+    // Transient messages are owned by the warm ToastHost, which reads and
+    // clears c.message itself (replacing the old Material SnackBar).
     if (c.gameOver && mounted) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted) _handleGameOver();
@@ -94,7 +89,7 @@ class _GameScreenState extends State<GameScreen> {
     // Daily shows the stats sheet; Journey keeps you in the level flow.
     if (c.mode == GameMode.daily) {
       Future.delayed(const Duration(milliseconds: 700), () {
-        if (mounted) StatsSheet.show(context, c);
+        if (mounted) StatisticsScreen.show(context, c);
       });
     }
   }
@@ -129,66 +124,48 @@ class _GameScreenState extends State<GameScreen> {
         final isJourney = c.mode == GameMode.journey;
         return Stack(
           children: [
-            Scaffold(
-              appBar: AppBar(
-                titleSpacing: 12,
-                title: Text(
-                  isJourney ? 'Level ${c.journeyLevel}' : Branding.appName,
-                ),
-                actions: [
-                  _CoinChip(controller: c),
-                  IconButton(
-                    tooltip: c.canUseHint
-                        ? 'Reveal a letter (costs coins)'
-                        : 'Nothing left to reveal',
-                    onPressed: c.canUseHint ? c.useHint : null,
-                    icon: const Icon(Icons.lightbulb_outline),
-                  ),
-                  IconButton(
-                    tooltip: 'Stats',
-                    onPressed: () => StatsSheet.show(context, c),
-                    icon: const Icon(Icons.bar_chart),
-                  ),
-                  PopupMenuButton<String>(
-                    onSelected: (value) {
-                      switch (value) {
-                        case 'how':
-                          HowToPlaySheet.show(context);
-                        case 'settings':
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => SettingsScreen(
-                                storage: c.storage,
-                                coins: c.coinService,
-                              ),
-                            ),
-                          );
-                      }
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 'how', child: Text('How to play')),
-                      PopupMenuItem(value: 'settings', child: Text('Settings')),
+            CozyBackground(
+              child: Scaffold(
+                backgroundColor: Colors.transparent,
+                drawerScrimColor: AppPalette.drawerScrim,
+                drawer: AppDrawer(controller: c),
+                body: SafeArea(
+                  child: Column(
+                    children: [
+                      _TopBar(controller: c),
+                      const SizedBox(height: 4),
+                      ModeSwitcher(mode: c.mode, onChanged: _setMode),
+                      IdentityHeader(
+                        isJourney: isJourney,
+                        dailyNumber: c.dailyNumber,
+                        level: c.journeyLevel,
+                        chapter: c.journeyChapter,
+                      ),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: Center(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: BoardGrid(controller: c),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      BoardInfoBar(controller: c),
+                      _EndActions(
+                        controller: c,
+                        onNextLevel: _nextJourneyLevel,
+                        onRetry: _retryJourneyLevel,
+                        onExtraGuess: c.useExtraGuess,
+                      ),
+                      ToastHost(controller: c),
+                      Keyboard(
+                        keyStatus: c.keyStatus,
+                        onKey: c.onKey,
+                        hintedLetters: c.revealedHints.values.toSet(),
+                      ),
                     ],
                   ),
-                ],
-              ),
-              body: SafeArea(
-                child: Column(
-                  children: [
-                    const SizedBox(height: 8),
-                    ModeSwitcher(mode: c.mode, onChanged: _setMode),
-                    if (isJourney) _JourneyBanner(controller: c),
-                    const SizedBox(height: 8),
-                    Expanded(child: BoardGrid(controller: c)),
-                    _EndActions(
-                      controller: c,
-                      onNextLevel: _nextJourneyLevel,
-                      onRetry: _retryJourneyLevel,
-                      onExtraGuess: c.useExtraGuess,
-                    ),
-                    Keyboard(controller: c),
-                    const SizedBox(height: 8),
-                  ],
                 ),
               ),
             ),
@@ -207,62 +184,150 @@ class _GameScreenState extends State<GameScreen> {
   }
 }
 
-/// App-bar coin balance. Tapping it opens the watch-ad-to-earn flow.
-class _CoinChip extends StatelessWidget {
+/// Warm top bar (redesign §4): menu · wordmark · coin pill + hint + stats.
+class _TopBar extends StatelessWidget {
   final GameController controller;
-  const _CoinChip({required this.controller});
+  const _TopBar({required this.controller});
 
   @override
   Widget build(BuildContext context) {
+    final c = controller;
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Material(
-        color: Colors.white10,
-        borderRadius: BorderRadius.circular(20),
-        child: InkWell(
-          borderRadius: BorderRadius.circular(20),
-          onTap: controller.watchAdForCoins,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Icon(Icons.monetization_on,
-                    size: 18, color: Color(0xFFF2C24B)),
-                const SizedBox(width: 4),
-                Text('${controller.coins}',
-                    style: const TextStyle(fontWeight: FontWeight.bold)),
-                const SizedBox(width: 2),
-                const Icon(Icons.add, size: 14, color: Colors.white54),
-              ],
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 6),
+      child: SizedBox(
+        height: 40,
+        child: Row(
+          children: [
+            Semantics(
+              button: true,
+              label: 'Menu',
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: () => Scaffold.of(context).openDrawer(),
+                child: _iconBox(const Icon(Icons.menu,
+                    size: 20, color: AppPalette.iconStroke)),
+              ),
             ),
+            Expanded(
+              child: Center(
+                child: Text(Branding.appName,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: AppType.fredoka(
+                        fontSize: 22,
+                        color: AppPalette.ink,
+                        letterSpacing: 0.4)),
+              ),
+            ),
+            _CoinPill(controller: c),
+            const SizedBox(width: 8),
+            _IconBtn(
+              icon: Icons.lightbulb_outline,
+              tooltip: c.canUseHint
+                  ? 'Reveal a letter (costs coins)'
+                  : 'Nothing left to reveal',
+              onTap: c.canUseHint ? c.useHint : null,
+            ),
+            const SizedBox(width: 8),
+            _IconBtn(
+              icon: Icons.bar_chart,
+              tooltip: 'Stats',
+              onTap: () => StatisticsScreen.show(context, c),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  static Widget _iconBox(Widget child) => Container(
+        width: 38,
+        height: 38,
+        alignment: Alignment.center,
+        decoration: BoxDecoration(
+          color: AppPalette.chipFill,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: AppPalette.chipBorder),
+        ),
+        child: child,
+      );
+}
+
+/// A 34×34 warm icon button (stats / hint). Dims when disabled.
+class _IconBtn extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback? onTap;
+  const _IconBtn({required this.icon, required this.tooltip, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final enabled = onTap != null;
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(11),
+        child: Container(
+          width: 34,
+          height: 34,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: AppPalette.chipFill,
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: AppPalette.chipBorder),
           ),
+          child: Icon(icon,
+              size: 18,
+              color: AppPalette.iconStroke
+                  .withValues(alpha: enabled ? 1.0 : 0.4)),
         ),
       ),
     );
   }
 }
 
-/// Social-proof strip shown above the Journey board.
-class _JourneyBanner extends StatelessWidget {
+/// Coin balance pill (§4). Tapping opens the watch-ad-to-earn flow.
+class _CoinPill extends StatelessWidget {
   final GameController controller;
-  const _JourneyBanner({required this.controller});
+  const _CoinPill({required this.controller});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-      child: Row(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.people_alt_outlined,
-              size: 16, color: Colors.white54),
-          const SizedBox(width: 6),
-          Text(
-            '${controller.journeySolvedPercent}% of players solved this level',
-            style: const TextStyle(color: Colors.white54, fontSize: 13),
+    return Material(
+      color: AppPalette.bgGlow,
+      borderRadius: BorderRadius.circular(11),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(11),
+        onTap: controller.watchAdForCoins,
+        child: Container(
+          height: 34,
+          padding: const EdgeInsets.fromLTRB(9, 0, 11, 0),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(11),
+            border: Border.all(color: AppPalette.coinPillBorder),
           ),
-        ],
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 18,
+                height: 18,
+                decoration: const BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: LinearGradient(
+                      begin: Alignment.topCenter,
+                      end: Alignment.bottomCenter,
+                      colors: [AppPalette.coinTop, AppPalette.coinBottom]),
+                ),
+              ),
+              const SizedBox(width: 6),
+              Text('${controller.coins}',
+                  style: AppType.fredoka(
+                      fontSize: 14, color: AppPalette.coinsAmber)),
+            ],
+          ),
+        ),
       ),
     );
   }
