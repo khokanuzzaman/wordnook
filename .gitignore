@@ -43,3 +43,6 @@ app.*.map.json
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# iOS AdMob real app id (mirrors android/admob.properties; never commit)
+**/ios/Flutter/AdMob.secret.xcconfig

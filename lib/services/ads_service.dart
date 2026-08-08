@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:io' show Platform;
+import 'package:app_tracking_transparency/app_tracking_transparency.dart';
 import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:google_mobile_ads/google_mobile_ads.dart';
 
@@ -36,10 +37,19 @@ class AdsService implements GameAds {
   static const _testBannerAndroid = 'ca-app-pub-3940256099942544/6300978111';
   static const _testBannerIos = 'ca-app-pub-3940256099942544/2934735716';
 
-  // Real IDs come from --dart-define=ADMOB_REWARDED=... etc. Empty => use test.
+  // Real ANDROID IDs come from --dart-define=ADMOB_REWARDED=... (via
+  // scripts/build_release_aab.sh). Empty => use test.
   static const _realRewarded = String.fromEnvironment('ADMOB_REWARDED');
   static const _realInterstitial = String.fromEnvironment('ADMOB_INTERSTITIAL');
   static const _realBanner = String.fromEnvironment('ADMOB_BANNER');
+
+  // iOS has its OWN app + ad units, so its real IDs come from separate keys
+  // (via scripts/build_release_ipa.sh). The Android keys above are NEVER used on
+  // iOS. Empty => use the iOS test ids.
+  static const _realRewardedIos = String.fromEnvironment('ADMOB_REWARDED_IOS');
+  static const _realInterstitialIos =
+      String.fromEnvironment('ADMOB_INTERSTITIAL_IOS');
+  static const _realBannerIos = String.fromEnvironment('ADMOB_BANNER_IOS');
 
   // Comma-separated device ids that should always receive TEST ads (even on
   // real ad units), so you can safely test on your own device without risking
@@ -62,18 +72,28 @@ class AdsService implements GameAds {
   static const _interstitialEveryNLevels = 3;
 
   String get _rewardedUnitId {
-    if (_realRewarded.isNotEmpty) return _realRewarded;
-    return Platform.isIOS ? _testRewardedIos : _testRewardedAndroid;
+    if (Platform.isIOS) {
+      return _realRewardedIos.isNotEmpty ? _realRewardedIos : _testRewardedIos;
+    }
+    return _realRewarded.isNotEmpty ? _realRewarded : _testRewardedAndroid;
   }
 
   String get _interstitialUnitId {
-    if (_realInterstitial.isNotEmpty) return _realInterstitial;
-    return Platform.isIOS ? _testInterstitialIos : _testInterstitialAndroid;
+    if (Platform.isIOS) {
+      return _realInterstitialIos.isNotEmpty
+          ? _realInterstitialIos
+          : _testInterstitialIos;
+    }
+    return _realInterstitial.isNotEmpty
+        ? _realInterstitial
+        : _testInterstitialAndroid;
   }
 
   String get bannerUnitId {
-    if (_realBanner.isNotEmpty) return _realBanner;
-    return Platform.isIOS ? _testBannerIos : _testBannerAndroid;
+    if (Platform.isIOS) {
+      return _realBannerIos.isNotEmpty ? _realBannerIos : _testBannerIos;
+    }
+    return _realBanner.isNotEmpty ? _realBanner : _testBannerAndroid;
   }
 
   Future<void> init() async {
@@ -87,6 +107,12 @@ class AdsService implements GameAds {
     // GDPR/EEA; on non-EEA devices the form simply isn't shown. Failures are
     // non-fatal — AdMob then serves non-personalized ads.
     await _gatherConsent(testIds);
+
+    // iOS App Tracking Transparency: request AFTER UMP consent and BEFORE ads
+    // init (Google's recommended order). Our markets (US/UK/CA/AU/NZ/SG) are
+    // non-EEA so UMP shows no form — this is the real gate for IDFA use.
+    // Fail-silent: declining just yields non-personalized ads.
+    if (Platform.isIOS) await _requestAtt();
 
     // Register test devices so real ad units serve TEST ads on them (avoids
     // policy strikes from self-clicks during development).
@@ -137,6 +163,21 @@ class AdsService implements GameAds {
     // Safety net: if the platform never calls back, don't hang ad init.
     return completer.future
         .timeout(const Duration(seconds: 8), onTimeout: () {});
+  }
+
+  /// Shows the iOS ATT prompt once (iOS 14.5+; older iOS is a no-op). Never
+  /// throws or blocks ad init — if ATT is unavailable or the user declines, ads
+  /// still serve, just non-personalized.
+  Future<void> _requestAtt() async {
+    try {
+      final status =
+          await AppTrackingTransparency.trackingAuthorizationStatus;
+      if (status == TrackingStatus.notDetermined) {
+        await AppTrackingTransparency.requestTrackingAuthorization();
+      }
+    } catch (_) {
+      // ATT plugin/platform unavailable — proceed without it.
+    }
   }
 
   // --- Rewarded ------------------------------------------------------------

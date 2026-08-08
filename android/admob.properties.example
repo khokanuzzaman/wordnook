@@ -6,14 +6,26 @@
 # App ids look like  ca-app-pub-0000000000000000~1111111111
 # Ad-unit ids look like  ca-app-pub-0000000000000000/2222222222
 #
-# Only ADMOB_APP_ID_ANDROID is read by Gradle (injected into the manifest).
-# The unit ids below are passed to the build via scripts/build_release_aab.sh.
+# ANDROID:
+#   ADMOB_APP_ID_ANDROID is read by Gradle (injected into the manifest).
+#   ADMOB_REWARDED / _INTERSTITIAL / _BANNER are passed to the build via
+#   scripts/build_release_aab.sh.
+# iOS:
+#   ADMOB_APP_ID_IOS is written into ios/Flutter/AdMob.secret.xcconfig by
+#   scripts/build_release_ipa.sh (feeds Info.plist's GADApplicationIdentifier).
+#   ADMOB_*_IOS are passed to that build as --dart-define. iOS ad units are
+#   SEPARATE from Android's — create them under the iOS app in AdMob.
 
 ADMOB_APP_ID_ANDROID=
-ADMOB_APP_ID_IOS=
 ADMOB_REWARDED=
 ADMOB_INTERSTITIAL=
 ADMOB_BANNER=
+
+ADMOB_APP_ID_IOS=
+ADMOB_REWARDED_IOS=
+ADMOB_INTERSTITIAL_IOS=
+ADMOB_BANNER_IOS=
+
 # Optional: comma-separated device ids that always get TEST ads (safe to click
-# on your own phone). Find yours in logcat: "setTestDeviceIds(Arrays.asList(...))".
+# on your own phone). Find yours in logcat/Xcode console: "setTestDeviceIds(...)".
 ADMOB_TEST_DEVICE_IDS=

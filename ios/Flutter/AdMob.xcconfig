@@ -1,0 +1,9 @@
+// AdMob iOS application id — feeds Info.plist's GADApplicationIdentifier via
+// $(ADMOB_APP_ID_IOS). This committed default is Google's PUBLIC test app id, so
+// `flutter run` / simulator builds work out of the box with test ads.
+//
+// For a real release, scripts/build_release_ipa.sh reads ADMOB_APP_ID_IOS from
+// android/admob.properties and writes it into ios/Flutter/AdMob.secret.xcconfig
+// (gitignored). That file is #include?'d AFTER this one in Debug/Release.xcconfig,
+// so its value wins. Never hardcode the real id here.
+ADMOB_APP_ID_IOS = ca-app-pub-3940256099942544~1458002511

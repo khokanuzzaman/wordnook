@@ -1,5 +1,6 @@
-# Uncomment this line to define a global platform for your project
-# platform :ios, '13.0'
+# Global platform — matches the project's iOS deployment target. Firebase 11.x
+# needs iOS 13, google_mobile_ads 5.x needs 12, Flutter itself needs 13.
+platform :ios, '13.0'
 
 # CocoaPods analytics sends network stats synchronously affecting flutter build latency.
 ENV['COCOAPODS_DISABLE_STATS'] = 'true'
