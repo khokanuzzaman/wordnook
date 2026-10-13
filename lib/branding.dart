@@ -7,7 +7,7 @@ class Branding {
 
   /// User-facing version string shown on the About screen. Keep in sync with
   /// the `version:` name in pubspec.yaml (no runtime package-info dependency).
-  static const String version
+  static const String version = '0.2.0';
 
   /// Longer About-screen description of the app's calm, cozy positioning.
   static const String appDescription =
