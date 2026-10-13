@@ -17,3 +17,25 @@ Regenerate every icon (Android mipmaps, adaptive foreground, iOS AppIcon set, th
 pip install pillow
 python3 tools/brand/generate_icons.py
 ```
+
+## Play Store screenshots
+
+Real app captures, framed on the brand background with a headline. Play's policy requires real screens, not mock UI.
+
+1. On a phone or emulator, capture these 5 screens in order and save them as `store/raw/01.png` … `05.png` (the folder is gitignored):
+   1. Daily mid-game (a couple of coloured rows)
+   2. A finished Daily with the board and the Share button
+   3. The "Keep going?" card
+   4. Journey "WARM-UP 1 OF 3"
+   5. The Statistics screen with a streak
+
+   Capture each one with:
+
+   ```bash
+   adb exec-out screencap -p > store/raw/01.png
+   ```
+
+2. Run `python3 tools/brand/compose_screenshots.py`. It writes `store/play/screenshots/01..05.png` at 1080×1920.
+3. Upload those files as the phone screenshots in Play Console.
+
+Headlines live in `HEADLINES` in the script. Keep them true: the Daily has no pop-up ads, and rewarded ads are opt-in only.
