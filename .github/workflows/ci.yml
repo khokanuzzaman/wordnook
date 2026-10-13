@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - feat/analytics-and-tier1-fixes
+      - main
+
+# A newer push to the same branch/PR cancels the run still in flight.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  analyze-and-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      # Pinned to the version used locally so CI and dev machines agree.
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      # Analyze + test only: no signing keys, AdMob IDs or builds are needed.
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
