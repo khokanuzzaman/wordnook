@@ -160,12 +160,33 @@ void main() {
       expect(find.text('Start with any 5-letter word.'), findsNothing);
     });
 
-    testWidgets('Journey streak chip is "N levels cleared"', (tester) async {
+    testWidgets('Journey chip: fresh Level 1 says no levels cleared yet',
+        (tester) async {
       final c = await _controller();
       c.startGame(GameMode.journey);
+      expect(c.journeyLevel, 1);
       await _pump(tester, BoardInfoBar(controller: c));
-      expect(find.textContaining('levels cleared'), findsOneWidget);
+      expect(find.text('No levels cleared yet'), findsOneWidget);
       expect(find.textContaining('Next word in'), findsNothing);
+    });
+
+    testWidgets(
+        'Journey chip: after solving one level it says "1 level cleared"',
+        (tester) async {
+      final c = await _controller();
+      c.startGame(GameMode.journey);
+      for (final ch in c.answer.split('')) {
+        c.onKey(ch);
+      }
+      c.onKey('ENTER');
+      // Real async: the win persists progress through the (mock) prefs.
+      await tester.runAsync(() => Future<void>.delayed(Duration.zero));
+      expect(c.won, isTrue);
+      expect(c.journeyLevel, 2); // advanced on the win
+
+      await _pump(tester, BoardInfoBar(controller: c));
+      expect(find.text('1 level cleared'), findsOneWidget);
+      expect(find.text('No levels cleared yet'), findsNothing);
     });
   });
 }
