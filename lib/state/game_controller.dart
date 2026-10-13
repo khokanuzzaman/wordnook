@@ -8,6 +8,7 @@ import '../data/word_repository.dart';
 import '../logic/coin_rules.dart';
 import '../logic/game_engine.dart';
 import '../logic/share_formatter.dart';
+import '../logic/tips.dart';
 import '../models/game_result.dart';
 import '../models/letter_status.dart';
 import '../services/ads_service.dart';
@@ -60,6 +61,9 @@ class GameController extends ChangeNotifier {
   /// How many extra rows a player may buy per puzzle via "Keep going?".
   static const int maxExtraRows = 1;
 
+  /// Warm-up Journey levels a brand-new player plays before the Daily.
+  static const int firstStepsLevels = 3;
+
   /// Journey levels a new player clears before any interstitial can show.
   static const int journeyAdGraceLevels = 8;
   int get wordLength => WordRepository.wordLength;
@@ -86,13 +90,24 @@ class GameController extends ChangeNotifier {
 
   /// Journey chapter for the current level: 10 levels per chapter (1–10 → 1,
   /// 11–20 → 2, …). Presentation only — no persisted chapter model.
-  int get journeyChapter => ((_journeyLevel - 1) ~/ 10) + 1;
+  int get journeyChapter => ((displayedJourneyLevel - 1) ~/ 10) + 1;
+
+  /// The Journey level the board on screen belongs to. The stored level moves
+  /// on the moment a level is solved, but the header should keep naming the
+  /// solved level until the player taps "Next level".
+  int get displayedJourneyLevel =>
+      (_mode == GameMode.journey && _gameOver && _won && _journeyLevel > 1)
+          ? _journeyLevel - 1
+          : _journeyLevel;
+
+  // Whether the board on screen was started as a First Steps warm-up.
+  bool _boardIsWarmUp = false;
 
   // Within-session retry counter for the current Journey level. Each retry
   // after a loss shows a different word (but the level number is unchanged).
   int _journeyAttempt = 0;
   String _journeyWord() =>
-      _words.wordForLevel(_journeyLevel + _journeyAttempt * 7919);
+      _words.journeyWord(_journeyLevel, attempt: _journeyAttempt);
 
   /// Social-proof stat for the current Journey level.
   int get journeySolvedPercent => solvedPercentForLevel(_journeyLevel);
@@ -114,6 +129,10 @@ class GameController extends ChangeNotifier {
   int _extraRows = 0;
   bool _awaitingContinue = false;
   bool _settlingAbandoned = false;
+
+  // Set when the last warm-up level is solved; the screen shows the one-time
+  // "You're ready" sheet and clears it.
+  bool _dailyReadyPending = false;
   final List<String> _guesses = [];
   String _current = '';
   bool _gameOver = false;
@@ -213,6 +232,7 @@ class GameController extends ChangeNotifier {
       _analytics.logEvent(AnalyticsEvents.dailyStarted);
     } else {
       _journeyLevel = _storage.journeyLevel;
+      _boardIsWarmUp = inFirstSteps && _journeyLevel <= firstStepsLevels;
       _journeyAttempt =
           0; // fresh entry to a level starts at its canonical word
       _answer = _journeyWord();
@@ -300,6 +320,8 @@ class GameController extends ChangeNotifier {
       }
     }
 
+    final keyStatusBefore = Map<String, LetterStatus>.of(_keyStatus);
+    final guess = _current;
     _applyToKeyboard(_current);
     _guesses.add(_current);
     final solved = _current == _answer;
@@ -326,7 +348,54 @@ class GameController extends ChangeNotifier {
       _message = _lossMessage;
     }
 
+    if (!_gameOver) {
+      _maybeTipAfterGuess(guess, keyStatusBefore);
+    } else {
+      await _storage.incrementGamesFinished();
+    }
     await _settle();
+    notifyListeners();
+  }
+
+  // --- One-time tips -------------------------------------------------------
+
+  Set<Tip> get _tipsSeen => {
+        for (final id in _storage.tipsSeen)
+          if (TipRules.fromId(id) case final t?) t,
+      };
+
+  void _maybeTipAfterGuess(String guess, Map<String, LetterStatus> before) {
+    final pick = TipRules.afterGuess(
+      guess: guess,
+      statuses: GameEngine.evaluateGuess(guess, _answer),
+      keyStatusBefore: before,
+      seen: _tipsSeen,
+      gamesFinished: _storage.gamesFinished,
+    );
+    if (pick == null) return;
+    _showTip(pick.$1, pick.$2);
+  }
+
+  void _showTip(Tip tip, [String? letter]) {
+    _message = TipRules.text(tip, letter);
+    unawaited(_storage.markTipSeen(TipRules.id(tip)));
+    _analytics.logEvent(
+        AnalyticsEvents.tipShown, {AnalyticsParams.tip: TipRules.id(tip)});
+  }
+
+  /// Whether the idle "try STARE" tip could show right now (empty board, a
+  /// new player's first games, not seen yet). The screen runs the timer.
+  bool get idleTipEligible =>
+      acceptingInput &&
+      _guesses.isEmpty &&
+      _current.isEmpty &&
+      TipRules.idleEligible(
+          seen: _tipsSeen, gamesFinished: _storage.gamesFinished);
+
+  /// Shows the idle tip if it is still relevant (called by the screen's timer).
+  void showIdleTip() {
+    if (!idleTipEligible) return;
+    _showTip(Tip.idleStart);
     notifyListeners();
   }
 
@@ -413,9 +482,46 @@ class GameController extends ChangeNotifier {
         AnalyticsParams.source: AnalyticsSources.journeyLevel,
       });
       _analytics.syncJourney(_journeyLevel);
+      // Last warm-up solved: First Steps ends NOW (so a killed app can't leave
+      // a player stuck in it), and the screen shows the Daily card once.
+      if (inFirstSteps && completedLevel >= firstStepsLevels) {
+        _dailyReadyPending = true;
+        await _storage.setFirstStepsActive(false);
+        _analytics.logEvent(AnalyticsEvents.firstStepsCompleted,
+            {AnalyticsParams.reason: AnalyticsFirstStepsEnd.warmedUp});
+      }
       // The interstitial is NOT shown here — that would cover the win moment.
       // It is consulted when the player taps "Next level" ([nextJourneyLevel]).
     }
+  }
+
+  // --- First Steps ---------------------------------------------------------
+
+  /// Whether this player is still in the First Steps warm-up.
+  bool get inFirstSteps => _storage.firstStepsActive;
+
+  /// The warm-up number (1–[firstStepsLevels]) while a new player is on those
+  /// Journey levels, else null.
+  int? get warmUpStep => _mode == GameMode.journey && _boardIsWarmUp
+      ? displayedJourneyLevel
+      : null;
+
+  /// True once, right after the last warm-up level is solved — time to point
+  /// the player at today's Daily. Reading it clears it.
+  bool takeDailyReadyPending() {
+    final v = _dailyReadyPending;
+    _dailyReadyPending = false;
+    return v;
+  }
+
+  /// Ends First Steps (idempotent). [reason] is an [AnalyticsFirstStepsEnd].
+  Future<void> endFirstSteps(String reason) async {
+    if (!inFirstSteps) return;
+    _boardIsWarmUp = false;
+    await _storage.setFirstStepsActive(false);
+    _analytics.logEvent(AnalyticsEvents.firstStepsCompleted,
+        {AnalyticsParams.reason: reason});
+    notifyListeners();
   }
 
   /// Moves on from a solved Journey level. This tap — not the win itself — is
@@ -484,6 +590,7 @@ class GameController extends ChangeNotifier {
     if (!_awaitingContinue) return;
     _awaitingContinue = false;
     _gameOver = true;
+    await _storage.incrementGamesFinished();
     _message = _lossMessage;
     _analytics.logEvent(AnalyticsEvents.continueDeclined,
         {AnalyticsParams.mode: _mode.name});
@@ -570,6 +677,9 @@ class GameController extends ChangeNotifier {
       answer: _answer,
       won: _won,
       maxGuesses: maxGuesses,
+      // The flame only rides on a solved Daily.
+      streak: _mode == GameMode.daily && _won ? _stats.currentStreak : null,
+      link: Branding.playStoreUrl,
     );
   }
 

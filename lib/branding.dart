@@ -13,4 +13,8 @@ class Branding {
   static const String appDescription =
       'A cozy daily word puzzle. One warm little word a day — no timers, no '
       'scores, just a quiet moment to think.';
+
+  /// Store link appended to shared results so a share can become an install.
+  static const String playStoreUrl =
+      'https://play.google.com/store/apps/details?id=com.khokan.dailyword';
 }

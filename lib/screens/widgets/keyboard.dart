@@ -13,11 +13,15 @@ class Keyboard extends StatelessWidget {
   /// Letters revealed by a purchased hint — outlined (empty in the tutorial).
   final Set<String> hintedLetters;
 
+  /// Short phones (e.g. 360×640): slightly shorter keys so the board keeps room.
+  final bool compact;
+
   const Keyboard({
     super.key,
     required this.keyStatus,
     required this.onKey,
     this.hintedLetters = const {},
+    this.compact = false,
   });
 
   static const _rows = ['QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM'];
@@ -30,7 +34,7 @@ class Keyboard extends StatelessWidget {
         children: [
           for (var r = 0; r < _rows.length; r++)
             Padding(
-              padding: const EdgeInsets.only(bottom: 7),
+              padding: EdgeInsets.only(bottom: compact ? 5 : 7),
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: [
@@ -84,7 +88,7 @@ class Keyboard extends StatelessWidget {
           },
           borderRadius: BorderRadius.circular(10),
           child: Container(
-            height: 46,
+            height: compact ? 40 : 46,
             alignment: Alignment.center,
             decoration: BoxDecoration(
               gradient: LinearGradient(

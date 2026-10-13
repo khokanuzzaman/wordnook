@@ -86,6 +86,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_finished) return;
     _finished = true;
     await widget.storage.setOnboardingSeen();
+    // New players warm up on three easy Journey levels before the Daily.
+    await widget.storage.setFirstStepsActive(true);
     // Reminder is opt-in: if the player never tapped "Turn on" (or skipped),
     // leave it OFF so nothing nudges them and Settings reflects the truth. The
     // default is on, so we set it explicitly here.
@@ -143,7 +145,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         streakCount: 1,
         reminderTimeLabel: label,
         onTurnOnReminder: _turnOnReminder,
-        onPlayDaily: () {
+        onContinue: () {
           Navigator.of(sheetContext).pop();
           _finish(won: true);
         },
@@ -189,8 +191,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            _boardArea(animate),
-            const Spacer(),
+            // The board takes whatever height is left and scales down to fit,
+            // so the keyboard is always fully on screen — even on 360×640.
+            Expanded(
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: _boardArea(animate),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             if (c.step == OnboardingStep.solve && c.showStallNudge) ...[
               StallNudge(
                 message: c.stallHint(),
@@ -198,7 +209,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            Keyboard(keyStatus: c.keyStatus, onKey: c.onKey),
+            Keyboard(
+              keyStatus: c.keyStatus,
+              onKey: c.onKey,
+              compact: MediaQuery.sizeOf(context).height < 720,
+            ),
             const SizedBox(height: 8),
           ],
         ),

@@ -45,6 +45,10 @@ class AnalyticsEvents {
   static const continueAccepted = 'continue_accepted';
   static const continueDeclined = 'continue_declined';
 
+  // First Steps (new players' warm-up) and one-time tips.
+  static const firstStepsCompleted = 'first_steps_completed';
+  static const tipShown = 'tip_shown';
+
   // Journey mode.
   static const journeyLevelStarted = 'journey_level_started';
   static const journeyLevelCompleted = 'journey_level_completed';
@@ -88,6 +92,7 @@ class AnalyticsParams {
   static const to = 'to';
   static const step = 'step';
   static const via = 'via';
+  static const tip = 'tip';
 }
 
 /// Enum-like values for coin `source` (coins_earned).
@@ -97,6 +102,13 @@ class AnalyticsSources {
   static const journeyLevel = 'journey_level';
   static const watchAd = 'watch_ad';
   static const welcome = 'welcome';
+}
+
+/// Enum-like values for first_steps_completed `reason`.
+class AnalyticsFirstStepsEnd {
+  const AnalyticsFirstStepsEnd._();
+  static const warmedUp = 'warmed_up'; // cleared all warm-up levels
+  static const switchedToDaily = 'switched_to_daily'; // left early for Daily
 }
 
 /// Enum-like values for continue_accepted `via`.
@@ -189,21 +201,60 @@ class FirebaseAnalyticsService implements Analytics {
   }
 }
 
-/// Owns the global [Analytics] instance. Defaults to a no-op so tests (and any
-/// code that runs before [init]) are always safe; [init] swaps in the real
-/// Firebase implementation.
+/// Holds events logged before Firebase is ready (cold start: onboarding_started,
+/// daily_started …) and replays them once [AnalyticsService.init] installs the
+/// real sink. Capped, and never throws.
+class BufferingAnalytics implements Analytics {
+  static const int maxBuffered = 100;
+  final List<void Function(Analytics)> _pending = [];
+
+  int get pendingCount => _pending.length;
+
+  @override
+  void logEvent(String name, [Map<String, Object>? params]) {
+    if (_pending.length < maxBuffered) {
+      _pending.add((a) => a.logEvent(name, params));
+    }
+  }
+
+  @override
+  void setUserProperty(String name, String value) {
+    if (_pending.length < maxBuffered) {
+      _pending.add((a) => a.setUserProperty(name, value));
+    }
+  }
+
+  /// Replays everything into [target], in order, then forgets it.
+  void flushTo(Analytics target) {
+    for (final call in _pending) {
+      call(target);
+    }
+    _pending.clear();
+  }
+}
+
+/// Owns the global [Analytics] instance. Until [init] finishes it buffers
+/// events (so cold-start events aren't lost); [init] swaps in the real
+/// Firebase implementation and replays them, or drops them if analytics is
+/// off. Always safe to call, including in tests.
 class AnalyticsService {
   AnalyticsService._();
 
-  /// The live analytics sink. No-op until [init] succeeds.
-  static Analytics instance = const NoOpAnalytics();
+  /// The live analytics sink. Buffers until [init] completes.
+  static Analytics instance = BufferingAnalytics();
+
+  static void _install(Analytics sink) {
+    final previous = instance;
+    instance = sink;
+    if (previous is BufferingAnalytics) previous.flushTo(sink);
+  }
 
   /// Initializes Firebase and installs the real implementation. Honors the
   /// [kAnalyticsEnabledInDebug] kill switch. Safe to fire-and-forget — it never
   /// throws and never blocks the first frame.
   static Future<void> init() async {
     if (kDebugMode && !kAnalyticsEnabledInDebug) {
-      instance = const NoOpAnalytics();
+      _install(const NoOpAnalytics());
       return;
     }
     try {
@@ -212,10 +263,10 @@ class AnalyticsService {
       );
       final fa = FirebaseAnalytics.instance;
       await fa.setAnalyticsCollectionEnabled(true);
-      instance = FirebaseAnalyticsService(fa);
+      _install(FirebaseAnalyticsService(fa));
     } catch (_) {
-      // Leave the no-op in place; the app keeps working without analytics.
-      instance = const NoOpAnalytics();
+      // Analytics unavailable: drop the buffer; the app keeps working.
+      _install(const NoOpAnalytics());
     }
   }
 }

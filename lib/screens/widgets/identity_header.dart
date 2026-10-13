@@ -11,26 +11,43 @@ class IdentityHeader extends StatelessWidget {
   final int level;
   final int chapter;
 
+  /// While a new player is warming up: which warm-up (1-based) of [warmUpOf].
+  final int? warmUpStep;
+  final int warmUpOf;
+
+  /// Short phones: no subtitle and tighter spacing, so the board keeps room.
+  final bool compact;
+
   const IdentityHeader({
     super.key,
     required this.isJourney,
     required this.dailyNumber,
     required this.level,
     required this.chapter,
+    this.warmUpStep,
+    this.warmUpOf = 3,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final kicker = isJourney ? 'JOURNEY · CHAPTER $chapter' : "TODAY'S PUZZLE";
+    final warm = isJourney ? warmUpStep : null;
+    final kicker = warm != null
+        ? 'WARM-UP $warm OF $warmUpOf'
+        : isJourney
+            ? 'JOURNEY · CHAPTER $chapter'
+            : "TODAY'S PUZZLE";
     final title = isJourney ? 'Level $level' : 'Daily Word #$dailyNumber';
-    final subtitle = isJourney
-        ? 'Guess the hidden 5-letter word to advance.'
-        : 'Guess the hidden 5-letter word in six tries.';
+    final subtitle = warm != null
+        ? 'An easy one to get comfortable.'
+        : isJourney
+            ? 'Guess the hidden 5-letter word to advance.'
+            : 'Guess the hidden 5-letter word in six tries.';
     final kickerColor =
         isJourney ? AppPalette.journeyKicker : AppPalette.dailyKicker;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+      padding: EdgeInsets.fromLTRB(24, compact ? 4 : 12, 24, compact ? 0 : 4),
       child: Column(
         children: [
           Text(
@@ -47,14 +64,17 @@ class IdentityHeader extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: AppType.fredoka(fontSize: 27, color: AppPalette.ink),
+            style: AppType.fredoka(
+                fontSize: compact ? 23 : 27, color: AppPalette.ink),
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: AppType.nunito(fontSize: 14, color: AppPalette.muted),
-          ),
+          if (!compact) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: AppType.nunito(fontSize: 14, color: AppPalette.muted),
+            ),
+          ],
         ],
       ),
     );

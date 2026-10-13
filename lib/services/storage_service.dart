@@ -32,6 +32,11 @@ class StorageService {
       'last_recorded_date'; // yyyy-mm-dd of the last recorded daily result
   static const _kDailyWon = 'daily_won'; // bool: outcome of the saved board
   static const _kWelcomeCoins = 'welcome_coins_granted'; // bool, one-time
+  static const _kTipsSeen = 'tips_seen'; // csv of one-time tip ids
+  static const _kGamesFinished =
+      'games_finished'; // int: Daily + Journey games ended (tips window)
+  static const _kFirstSteps =
+      'first_steps_active'; // bool: new player is in the warm-up levels
   static const _kDailyExtraRows =
       'daily_extra_rows'; // int: rows bought for the board at [_kDailyDate]
 
@@ -43,7 +48,8 @@ class StorageService {
   ///   v4 — backfill [_kDailyWon] so the outcome is stored, not inferred
   ///   v5 — backfill [_kOnboardingSeen] for existing players (new tutorial)
   ///   v6 — day keys switch from UTC to the device's local date
-  static const int _schemaVersion = 6;
+  ///   v7 — Journey words now follow difficulty tiers; drop stale journey hints
+  static const int _schemaVersion = 7;
 
   late final SharedPreferences _prefs;
 
@@ -63,6 +69,7 @@ class StorageService {
     if (from < 4) await _migrateToV4();
     if (from < 5) await _migrateToV5();
     if (from < 6) await _migrateToV6();
+    if (from < 7) await _migrateToV7();
     await _prefs.setInt(_kDailyMapVersion, _schemaVersion);
   }
 
@@ -155,6 +162,32 @@ class StorageService {
       await _prefs.remove(_kDailyExtraRows);
     }
   }
+
+  /// v7 — Journey levels now draw from difficulty tiers, so the word for an
+  /// in-progress level may have changed. A hint bought for the OLD word would
+  /// show a wrong letter on the new one, so drop journey-scoped reveals. Daily
+  /// reveals ("d:" scopes) are untouched — the daily word did not change.
+  ///
+  /// Also: one-time beginner tips are new in v7 and keyed on games finished.
+  /// An upgrading player already knows the game, so mark their tip window as
+  /// used. A fresh install has no history and is left alone.
+  Future<void> _migrateToV7() async {
+    final scope = _prefs.getString(_kHintScope);
+    if (scope != null && scope.startsWith('j:')) {
+      await _prefs.remove(_kHintScope);
+      await _prefs.remove(_kHintReveals);
+    }
+    final experienced = loadStats().gamesPlayed > 0 ||
+        (_prefs.getInt(_kJourneyLevel) ?? 1) > 1 ||
+        (_prefs.getBool(_kOnboardingSeen) ?? false);
+    if (experienced && gamesFinished < tipsWindowGames) {
+      await _prefs.setInt(_kGamesFinished, tipsWindowGames);
+    }
+  }
+
+  /// Games after which beginner tips stop (mirrors TipRules.eligibleGames;
+  /// kept here so storage doesn't depend on the tip logic).
+  static const int tipsWindowGames = 5;
 
   /// Test seam for the v6 clamp with an injected clock.
   @visibleForTesting
@@ -452,6 +485,29 @@ class StorageService {
 
   bool get onboardingSeen => _prefs.getBool(_kOnboardingSeen) ?? false;
   Future<void> setOnboardingSeen() => _prefs.setBool(_kOnboardingSeen, true);
+
+  /// One-time tips already shown (by id).
+  Set<String> get tipsSeen => (_prefs.getString(_kTipsSeen) ?? '')
+      .split(',')
+      .where((s) => s.isNotEmpty)
+      .toSet();
+
+  Future<void> markTipSeen(String id) async {
+    final seen = tipsSeen..add(id);
+    await _prefs.setString(_kTipsSeen, seen.join(','));
+  }
+
+  /// Games finished in either mode — new players get tips for their first few.
+  int get gamesFinished => _prefs.getInt(_kGamesFinished) ?? 0;
+  Future<void> incrementGamesFinished() =>
+      _prefs.setInt(_kGamesFinished, gamesFinished + 1);
+
+  /// "First Steps": a brand-new player warms up on Journey levels 1–3 before
+  /// the Daily. Set only when the first-run tutorial finishes, so existing
+  /// players (who never see the new tutorial) are never affected.
+  bool get firstStepsActive => _prefs.getBool(_kFirstSteps) ?? false;
+  Future<void> setFirstStepsActive(bool value) =>
+      _prefs.setBool(_kFirstSteps, value);
 
   /// Seeds the real streak from a WON tutorial: the tutorial counts as today's
   /// streak-day, so the win screen's "1" is truthful and tomorrow's daily win

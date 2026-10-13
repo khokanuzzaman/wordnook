@@ -133,7 +133,10 @@ class _MenuItem extends StatelessWidget {
                   width: 16,
                   child: active ? const _ActiveDot() : null,
                 ),
-                Text(label,
+                Flexible(
+                  child: Text(label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
                     style: AppType.nunito(
                         fontSize: 16,
                         fontWeight:
@@ -141,6 +144,7 @@ class _MenuItem extends StatelessWidget {
                         color: active
                             ? AppPalette.ink
                             : AppPalette.menuInactiveText)),
+                ),
               ],
             ),
           ),

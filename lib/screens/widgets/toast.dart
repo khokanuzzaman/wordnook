@@ -3,11 +3,12 @@ import 'dart:math' as math;
 import 'package:flutter/material.dart';
 
 import '../../logic/coin_rules.dart';
+import '../../logic/tips.dart';
 import '../../state/game_controller.dart';
 import '../../theme/app_theme.dart';
 
 /// The four warm toast variants (handoff-toast §C).
-enum ToastKind { hint, reward, validation, unavailable }
+enum ToastKind { hint, reward, validation, unavailable, tip }
 
 /// Win-praise words emitted by the controller on a solve. Kept in sync with
 /// GameController._winMessage. Used both to classify a win as a reward and to
@@ -25,6 +26,7 @@ const List<String> kWinPraise = [
 /// the controller keeps producing the same strings.
 ToastKind classifyToast(String m) {
   if (m.startsWith('Hint: position')) return ToastKind.hint;
+  if (TipRules.isTip(m)) return ToastKind.tip;
   if (m.startsWith('No ad available')) return ToastKind.unavailable;
   if ((m.startsWith('+') && m.contains('coins')) ||
       m.contains('granted') ||
@@ -98,6 +100,8 @@ class _ToastHostState extends State<ToastHost> with TickerProviderStateMixin {
   }
 
   void _present(String text, ToastKind kind) {
+    // Tips teach — give them time to be read.
+    _life.duration = Duration(milliseconds: kind == ToastKind.tip ? 4000 : 2200);
     setState(() {
       _text = text;
       _kind = kind;
@@ -272,6 +276,7 @@ class _IconWell extends StatelessWidget {
     Widget mark;
     switch (kind) {
       case ToastKind.hint:
+      case ToastKind.tip:
         mark = const Icon(Icons.lightbulb, size: 17, color: AppPalette.present);
         break;
       case ToastKind.reward:
@@ -384,6 +389,16 @@ class _ToastStyle {
           badgeFill: AppPalette.toastHintBadgeFill,
           badgeBorder: AppPalette.toastHintBadgeBorder,
           badgeText: AppPalette.coinsAmber,
+        );
+      case ToastKind.tip:
+        // Same warm amber card as a hint, without the coin-cost badge.
+        return const _ToastStyle(
+          top: AppPalette.toastHintTop,
+          bottom: AppPalette.toastHintBottom,
+          border: AppPalette.toastHintBorder,
+          well: AppPalette.toastHintWell,
+          accent: AppPalette.present,
+          text: AppPalette.ink,
         );
       case ToastKind.reward:
         return const _ToastStyle(

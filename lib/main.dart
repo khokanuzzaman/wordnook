@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'app.dart';
 import 'data/word_repository.dart';
@@ -13,6 +14,9 @@ import 'theme/app_theme.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // The board + keyboard layout is portrait-only; landscape left the board
+  // invisible on phones.
+  await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
 
   final storage = StorageService();
   await storage.init();

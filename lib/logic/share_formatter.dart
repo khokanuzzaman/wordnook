@@ -31,6 +31,8 @@ class ShareFormatter {
     required String answer,
     required bool won,
     required int maxGuesses,
+    int? streak,
+    String? link,
   }) {
     final label = dayNumber != null ? '#$dayNumber' : 'Journey';
     // A win on a bought extra row reads "6+1/6" — honest, never "7/6".
@@ -45,6 +47,9 @@ class ShareFormatter {
       return statuses.map(emojiFor).join();
     }).join('\n');
 
-    return '$appName $label $score\n\n$rows';
+    // A streak worth bragging about (2+) rides on the header line.
+    final flame = (streak != null && streak >= 2) ? ' 🔥$streak' : '';
+    final footer = (link == null || link.isEmpty) ? '' : '\n\nPlay: $link';
+    return '$appName $label $score$flame\n\n$rows$footer';
   }
 }

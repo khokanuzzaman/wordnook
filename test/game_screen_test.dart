@@ -43,6 +43,7 @@ void main() {
     final answer = words.dailyWord();
     // Mark today's daily as already completed (won).
     await storage.saveDailyProgress(guesses: [answer], done: true);
+    await storage.saveDailyOutcome(won: true);
 
     final controller = GameController(
         words: words,
@@ -66,6 +67,9 @@ void main() {
 
     expect(find.text('Statistics'), findsOneWidget);
     expect(find.text('GUESS DISTRIBUTION'), findsOneWidget);
+    // A solved Daily also offers Share right on the board (behind the
+    // Statistics route, hence offstage).
+    expect(find.text('Share', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('winning the daily shows the celebration overlay',
