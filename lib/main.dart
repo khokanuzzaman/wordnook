@@ -23,9 +23,11 @@ Future<void> main() async {
   final words = WordRepository();
   await words.load();
 
-  // Ads init is fire-and-forget so it doesn't block first paint.
-  // Comment this out if running on a platform without AdMob configured yet.
-  unawaited(AdsService.instance.init());
+  // Ads init is fire-and-forget so it doesn't block first paint. It also
+  // shows the consent form (EEA) and the iOS tracking prompt, so on a FIRST
+  // run it waits until the tutorial is done (see app.dart) — nothing should
+  // pop over a new player's first minute, and no ad can show during it anyway.
+  if (storage.onboardingSeen) unawaited(AdsService.instance.init());
 
   // Analytics init is likewise off the critical path. Once it's ready, seed the
   // bucketed user properties from current state so segments are populated even

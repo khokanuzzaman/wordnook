@@ -51,9 +51,10 @@ class _BoardGridState extends State<BoardGrid>
     final c = widget.controller;
     final rowCount = math.max(
       GameController.maxGuesses,
-      c.guesses.length + (c.gameOver ? 0 : 1),
+      c.guesses.length + (c.acceptingInput ? 1 : 0),
     );
-    final activeRow = c.gameOver ? -1 : c.guesses.length;
+    // No active row while the game is over OR the "Keep going?" offer is open.
+    final activeRow = c.acceptingInput ? c.guesses.length : -1;
     final caretCol = c.current.length; // first empty cell in the active row
 
     return AnimatedBuilder(

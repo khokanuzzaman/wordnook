@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../branding.dart';
+import '../../logic/coin_rules.dart';
 import '../../services/analytics_service.dart';
 import '../../services/notification_service.dart';
 import '../../services/storage_service.dart';
@@ -90,6 +91,12 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     // default is on, so we set it explicitly here.
     if (!_reminderTurnedOn) {
       await widget.storage.setReminderEnabled(false);
+    }
+    if (await widget.storage.grantWelcomeCoins(CoinRules.welcomeCoins)) {
+      AnalyticsService.instance.logEvent(AnalyticsEvents.coinsEarned, {
+        AnalyticsParams.amount: CoinRules.welcomeCoins,
+        AnalyticsParams.source: AnalyticsSources.welcome,
+      });
     }
     if (won) {
       await widget.storage.beginStreakFromOnboarding();

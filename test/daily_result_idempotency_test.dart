@@ -123,9 +123,39 @@ void main() {
     });
   });
 
-  group('controller: extra guess cannot rewrite a recorded daily', () {
-    test('lose → extra guess → win leaves the streak alone and fires '
-        'streak_broken exactly once', () async {
+  group('controller: "Keep going?" happens BEFORE the result is recorded', () {
+    Future<void> missSix(GameController c) async {
+      final wrong = _words.firstWhere((w) => w != c.answer);
+      for (var i = 0; i < GameController.maxGuesses; i++) {
+        for (final ch in wrong.split('')) {
+          c.onKey(ch);
+        }
+        c.onKey('ENTER');
+        await Future<void>.delayed(Duration.zero);
+      }
+    }
+
+    test('sixth miss opens the offer and records nothing yet', () async {
+      final storage = await _storage();
+      final c = GameController(
+        words: WordRepository()..debugLoad(_words),
+        storage: storage,
+        coins: CoinService(storage),
+        ads: _FakeAds(),
+        analytics: _RecordingAnalytics(),
+      );
+      c.startGame(GameMode.daily);
+      await missSix(c);
+
+      expect(c.awaitingContinue, isTrue);
+      expect(c.gameOver, isFalse);
+      expect(c.acceptingInput, isFalse);
+      expect(storage.isDailyRecorded(), isFalse,
+          reason: 'nothing may be final while the offer is open');
+      expect(storage.loadStats().gamesPlayed, 0);
+    });
+
+    test('buying a row and then winning keeps the streak going', () async {
       final storage = await _storage();
       final coins = CoinService(storage);
       final analytics = _RecordingAnalytics();
@@ -137,66 +167,217 @@ void main() {
         analytics: analytics,
       );
 
-      // Build a real streak first, so a bogus reset would be visible.
-      final yesterday = DateTime.now().toUtc().subtract(const Duration(days: 1));
+      // A real streak from yesterday.
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
       await storage.recordDailyResult(
           won: true, guessesUsed: 3, now: yesterday);
       expect(storage.loadStats().currentStreak, 1);
 
       c.startGame(GameMode.daily);
-      // Lose today: six wrong guesses.
-      final wrong = _words.firstWhere((w) => w != c.answer);
-      for (var i = 0; i < GameController.maxGuesses; i++) {
-        for (final ch in wrong.split('')) {
-          c.onKey(ch);
-        }
-        c.onKey('ENTER');
-        await Future<void>.delayed(Duration.zero);
-      }
-      expect(c.gameOver, isTrue);
-      expect(c.won, isFalse);
-
-      final afterLoss = storage.loadStats();
-      expect(afterLoss.currentStreak, 0, reason: 'the loss legitimately ends it');
-      final brokenAfterLoss =
-          analytics.names.where((n) => n == AnalyticsEvents.streakBroken).length;
-      expect(brokenAfterLoss, 1, reason: 'one legitimate break for the loss');
-
-      // Buy an extra guess and WIN on the reopened board.
+      await missSix(c);
       await coins.award(CoinRules.extraGuessCost);
-      await c.useExtraGuess();
-      expect(c.gameOver, isFalse);
+      await c.continueWithCoins();
+      expect(coins.coins, 0);
+      expect(c.acceptingInput, isTrue);
+      expect(c.maxRows, GameController.maxGuesses + 1);
+
       for (final ch in c.answer.split('')) {
         c.onKey(ch);
       }
       c.onKey('ENTER');
       await Future<void>.delayed(Duration.zero);
+
       expect(c.won, isTrue);
+      final s = storage.loadStats();
+      expect(s.currentStreak, 2, reason: 'the extra row saved the streak');
+      expect(s.gamesPlayed, 2);
+      expect(s.gamesWon, 2);
+      expect(
+          analytics.names.where((n) => n == AnalyticsEvents.streakBroken),
+          isEmpty);
+    });
 
-      // The recorded result for today is final.
-      final afterExtra = storage.loadStats();
-      expect(afterExtra.gamesPlayed, afterLoss.gamesPlayed,
-          reason: 'today must not be counted twice');
-      expect(afterExtra.gamesWon, afterLoss.gamesWon);
-      expect(afterExtra.currentStreak, afterLoss.currentStreak,
-          reason: 'the streak must not be rewritten by the extra guess');
-      expect(afterExtra.guessDistribution, afterLoss.guessDistribution);
+    test('giving up records exactly one loss and one streak_broken', () async {
+      final storage = await _storage();
+      final analytics = _RecordingAnalytics();
+      final c = GameController(
+        words: WordRepository()..debugLoad(_words),
+        storage: storage,
+        coins: CoinService(storage),
+        ads: _FakeAds(),
+        analytics: analytics,
+      );
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: yesterday);
 
-      // No SECOND streak_broken, and nothing claiming a missed day.
-      final breaks =
-          analytics.names.where((n) => n == AnalyticsEvents.streakBroken).length;
-      expect(breaks, 1, reason: 'no bogus extra break may fire');
+      c.startGame(GameMode.daily);
+      await missSix(c);
+      await c.declineContinue();
+
+      expect(c.gameOver, isTrue);
+      expect(c.won, isFalse);
+      final s = storage.loadStats();
+      expect(s.currentStreak, 0);
+      expect(s.gamesPlayed, 2);
+      expect(
+          analytics.names.where((n) => n == AnalyticsEvents.streakBroken).length,
+          1);
       for (final p in analytics.paramsFor(AnalyticsEvents.streakBroken)) {
-        expect(p?[AnalyticsParams.reason], AnalyticsReasons.loss,
-            reason: 'a missed_day break here would be fabricated');
+        expect(p?[AnalyticsParams.reason], AnalyticsReasons.loss);
       }
+
+      // A second decline is a no-op.
+      await c.declineContinue();
+      expect(storage.loadStats().gamesPlayed, 2);
+    });
+
+    test('only one extra row per puzzle', () async {
+      final storage = await _storage();
+      final coins = CoinService(storage);
+      final c = GameController(
+        words: WordRepository()..debugLoad(_words),
+        storage: storage,
+        coins: coins,
+        ads: _FakeAds(),
+      );
+      c.startGame(GameMode.daily);
+      await missSix(c);
+      await c.continueWithAd();
+      expect(c.acceptingInput, isTrue);
+
+      // Miss the extra row too.
+      final wrong = _words.firstWhere((w) => w != c.answer);
+      for (final ch in wrong.split('')) {
+        c.onKey(ch);
+      }
+      c.onKey('ENTER');
+      await Future<void>.delayed(Duration.zero);
+
+      expect(c.gameOver, isTrue, reason: 'no second offer — the loss is final');
+      expect(c.awaitingContinue, isFalse);
+      expect(storage.isDailyRecorded(), isTrue);
+    });
+
+    test('an open offer survives an app restart', () async {
+      var storage = await _storage();
+      var c = GameController(
+        words: WordRepository()..debugLoad(_words),
+        storage: storage,
+        coins: CoinService(storage),
+        ads: _FakeAds(),
+      );
+      c.startGame(GameMode.daily);
+      await missSix(c);
+      expect(c.awaitingContinue, isTrue);
+
+      storage = await _storage();
+      c = GameController(
+        words: WordRepository()..debugLoad(_words),
+        storage: storage,
+        coins: CoinService(storage),
+        ads: _FakeAds(),
+      );
+      c.startGame(GameMode.daily);
+      expect(c.awaitingContinue, isTrue);
+      expect(c.gameOver, isFalse);
+      expect(c.guesses.length, GameController.maxGuesses);
+    });
+  });
+
+  group('"Keep going?" edge cases', () {
+    Future<void> type(GameController c, String w) async {
+      for (final ch in w.split('')) {
+        c.onKey(ch);
+      }
+      c.onKey('ENTER');
+      await Future<void>.delayed(Duration.zero);
+    }
+
+    GameController make(StorageService st, CoinService coins) =>
+        GameController(
+          words: WordRepository()..debugLoad(_words),
+          storage: st,
+          coins: coins,
+          ads: _FakeAds(),
+        );
+
+    test('a bought row survives a restart — no paying twice', () async {
+      var storage = await _storage();
+      var coins = CoinService(storage);
+      var c = make(storage, coins);
+      c.startGame(GameMode.daily);
+      final wrong = _words.firstWhere((w) => w != c.answer);
+      for (var i = 0; i < GameController.maxGuesses; i++) {
+        await type(c, wrong);
+      }
+      await coins.award(CoinRules.extraGuessCost);
+      await c.continueWithCoins();
+      expect(coins.coins, 0);
+      await Future<void>.delayed(Duration.zero);
+
+      // App killed before the 7th guess.
+      storage = await _storage();
+      coins = CoinService(storage);
+      c = make(storage, coins);
+      c.startGame(GameMode.daily);
+      expect(c.awaitingContinue, isFalse, reason: 'the row is already paid');
+      expect(c.acceptingInput, isTrue);
+      expect(c.maxRows, GameController.maxGuesses + 1);
+    });
+
+    test('a board abandoned at the offer is recorded as a loss later',
+        () async {
+      final yesterday = DateTime.now().subtract(const Duration(days: 1));
+      final storage = await _storage();
+      await storage.saveDailyProgress(
+          guesses: List.filled(GameController.maxGuesses, 'CRANE'),
+          done: false,
+          now: yesterday);
+
+      final c = make(storage, CoinService(storage));
+      c.startGame(GameMode.daily);
+      await Future<void>.delayed(Duration.zero);
+      await Future<void>.delayed(Duration.zero);
+
+      expect(storage.loadStats().gamesPlayed, 1);
+      expect(storage.loadStats().gamesWon, 0);
+      expect(c.guesses, isEmpty, reason: "today's board is fresh");
+      expect(c.acceptingInput, isTrue);
+    });
+
+    test('a win on the extra row counts in the last distribution bar',
+        () async {
+      final storage = await _storage();
+      final s = await storage.recordDailyResult(won: true, guessesUsed: 7);
+      expect(s.gamesWon, 1);
+      expect(s.guessDistribution.reduce((a, b) => a + b), 1);
+      expect(s.guessDistribution.last, 1);
+    });
+  });
+
+  group('restore streak after midnight', () {
+    test('does not pre-credit the new day', () async {
+      final storage = await _storage();
+      final d1 = _d(2026, 10, 10);
+      final d2 = _d(2026, 10, 11);
+      final d3 = _d(2026, 10, 12);
+      await storage.recordDailyResult(won: true, guessesUsed: 3, now: d1);
+      await storage.recordDailyResult(won: false, now: d2); // breaks it
+      expect(storage.pendingRestoreStreak(), 1);
+      // Sheet left open; restore tapped after midnight (d3).
+      final restored = await storage.restoreStreak(now: d3);
+      expect(restored.currentStreak, 1);
+      // d3's real daily is still live: a loss must break the streak.
+      final after = await storage.recordDailyResult(won: false, now: d3);
+      expect(after.currentStreak, 0);
     });
   });
 
   group('migration v3 backfills the guard for existing installs', () {
     /// yyyy-mm-dd for today in UTC, matching StorageService's day key.
     String todayKey() {
-      final d = DateTime.now().toUtc();
+      final d = DateTime.now();
       return '${d.year.toString().padLeft(4, '0')}-'
           '${d.month.toString().padLeft(2, '0')}-'
           '${d.day.toString().padLeft(2, '0')}';

@@ -16,6 +16,11 @@ class CoinRules {
   /// Extra coins per guess saved (faster solve ⇒ bigger reward).
   static const int speedBonusPerGuessSaved = 5;
 
+  /// One-time starter balance when the first-run tutorial ends (won or
+  /// skipped), so a new player's first tough word has a hint within reach
+  /// without being pushed straight to an ad.
+  static const int welcomeCoins = 50;
+
   /// Extra coins on a streak-milestone Daily win.
   static const int streakMilestoneBonus = 50;
 

@@ -132,18 +132,20 @@ class WordRepository {
   /// Walks [_dailyOrder] (a fixed permutation), NOT the alphabetically sorted
   /// answers list, so consecutive days are unrelated words.
   String dailyWord([DateTime? date]) {
-    final d = (date ?? DateTime.now()).toUtc();
-    final dayIndex =
-        DateTime.utc(d.year, d.month, d.day).difference(_epoch).inDays;
+    final dayIndex = _dayIndex(date ?? DateTime.now());
     final i = dayIndex % _dailyOrder.length;
     return _dailyOrder[i < 0 ? i + _dailyOrder.length : i];
   }
 
   /// The 1-based daily puzzle number for [date] (day 1 = the epoch).
-  int dailyNumber([DateTime? date]) {
-    final d = (date ?? DateTime.now()).toUtc();
-    return DateTime.utc(d.year, d.month, d.day).difference(_epoch).inDays + 1;
-  }
+  int dailyNumber([DateTime? date]) => _dayIndex(date ?? DateTime.now()) + 1;
+
+  /// Days since the epoch for [d]'s OWN calendar date — no time-zone
+  /// conversion. The app passes `DateTime.now()` (device-local), so the daily
+  /// rolls over at the player's local midnight, like other daily word games.
+  /// Built from date fields as a UTC date so DST can't skew the day count.
+  static int _dayIndex(DateTime d) =>
+      DateTime.utc(d.year, d.month, d.day).difference(_epoch).inDays;
 
   // --- Journey packs -------------------------------------------------------
 

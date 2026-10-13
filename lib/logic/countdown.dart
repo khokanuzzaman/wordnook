@@ -1,9 +1,11 @@
-/// Time until the next daily word — i.e. the next UTC midnight, since the daily
-/// rolls over at UTC midnight (see WordRepository). Pure and testable.
+/// Time until the next daily word — the next LOCAL midnight, since the daily
+/// rolls over at the device's local midnight (see WordRepository). Pure and
+/// testable: a UTC [now] is measured to the next UTC midnight instead.
 Duration timeUntilNextDaily([DateTime? now]) {
-  final n = (now ?? DateTime.now()).toUtc();
-  final nextMidnight =
-      DateTime.utc(n.year, n.month, n.day).add(const Duration(days: 1));
+  final n = now ?? DateTime.now();
+  final nextMidnight = n.isUtc
+      ? DateTime.utc(n.year, n.month, n.day + 1)
+      : DateTime(n.year, n.month, n.day + 1);
   final d = nextMidnight.difference(n);
   return d.isNegative ? Duration.zero : d;
 }

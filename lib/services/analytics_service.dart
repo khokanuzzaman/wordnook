@@ -40,6 +40,11 @@ class AnalyticsEvents {
   static const dailyCompleted = 'daily_completed';
   static const streakBroken = 'streak_broken';
 
+  // "Keep going?" — the extra-row offer on the last miss (both modes).
+  static const continueOffered = 'continue_offered';
+  static const continueAccepted = 'continue_accepted';
+  static const continueDeclined = 'continue_declined';
+
   // Journey mode.
   static const journeyLevelStarted = 'journey_level_started';
   static const journeyLevelCompleted = 'journey_level_completed';
@@ -82,6 +87,7 @@ class AnalyticsParams {
   static const enabled = 'enabled';
   static const to = 'to';
   static const step = 'step';
+  static const via = 'via';
 }
 
 /// Enum-like values for coin `source` (coins_earned).
@@ -90,6 +96,14 @@ class AnalyticsSources {
   static const dailyWin = 'daily_win';
   static const journeyLevel = 'journey_level';
   static const watchAd = 'watch_ad';
+  static const welcome = 'welcome';
+}
+
+/// Enum-like values for continue_accepted `via`.
+class AnalyticsContinueVia {
+  const AnalyticsContinueVia._();
+  static const coins = 'coins';
+  static const rewardedAd = 'rewarded_ad';
 }
 
 /// Enum-like values for coin `sink` (coins_spent).

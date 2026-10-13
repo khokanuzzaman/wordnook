@@ -237,7 +237,7 @@ class _WinSheetState extends State<WinSheet> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text('A gentle nudge each evening?',
+                      Text('A gentle daily nudge?',
                           style: AppType.fredoka(
                               fontSize: 15, color: AppPalette.ink)),
                       const SizedBox(height: 2),

@@ -71,6 +71,14 @@ class AdsService implements GameAds {
   int _journeyLevelsSinceAd = 0;
   static const _interstitialEveryNLevels = 3;
 
+  /// Minimum time between two interstitials, however fast levels are cleared.
+  static const Duration minInterstitialGap = Duration(minutes: 3);
+  DateTime? _lastInterstitialAt;
+
+  // init() is idempotent: it may be called from main (returning players) or
+  // when the first-run tutorial finishes (new players).
+  Future<void>? _initFuture;
+
   String get _rewardedUnitId {
     if (Platform.isIOS) {
       return _realRewardedIos.isNotEmpty ? _realRewardedIos : _testRewardedIos;
@@ -96,7 +104,11 @@ class AdsService implements GameAds {
     return _realBanner.isNotEmpty ? _realBanner : _testBannerAndroid;
   }
 
-  Future<void> init() async {
+  /// Gathers consent (UMP), asks iOS tracking permission, then starts the SDK.
+  /// Safe to call more than once — later calls share the first run.
+  Future<void> init() => _initFuture ??= _init();
+
+  Future<void> _init() async {
     final testIds = _testDeviceIds
         .split(',')
         .map((s) => s.trim())
@@ -244,10 +256,18 @@ class AdsService implements GameAds {
   /// due now, advancing/resetting the level counter as a side effect. Kept
   /// separate from [maybeShowJourneyInterstitial] so the gating is unit-testable
   /// without the AdMob plugin.
-  bool shouldShowJourneyInterstitial() {
+  /// Every [_interstitialEveryNLevels]th completed level is due an ad, but
+  /// never sooner than [minInterstitialGap] after the last one. A due ad that
+  /// is held back by the gap stays due and shows on the next eligible level.
+  /// [now] is a test seam.
+  bool shouldShowJourneyInterstitial({DateTime? now}) {
     _journeyLevelsSinceAd++;
     if (_journeyLevelsSinceAd < _interstitialEveryNLevels) return false;
+    final t = now ?? DateTime.now();
+    final last = _lastInterstitialAt;
+    if (last != null && t.difference(last) < minInterstitialGap) return false;
     _journeyLevelsSinceAd = 0;
+    _lastInterstitialAt = t;
     return true;
   }
 
@@ -255,18 +275,22 @@ class AdsService implements GameAds {
   @visibleForTesting
   void debugResetCadence() {
     _journeyLevelsSinceAd = 0;
+    _lastInterstitialAt = null;
   }
 
   /// Call at the end of a JOURNEY level. Shows an interstitial only every N
   /// levels, and never when Remove Ads is owned. Do NOT call this in Daily mode.
   @override
   void maybeShowJourneyInterstitial() {
-    if (!shouldShowJourneyInterstitial()) return;
     final ad = _interstitial;
     if (ad == null) {
+      // Nothing loaded: count the level but don't consume the slot or start
+      // the gap clock — the ad stays due for the next level.
+      _journeyLevelsSinceAd++;
       _loadInterstitial();
       return;
     }
+    if (!shouldShowJourneyInterstitial()) return;
     ad.fullScreenContentCallback = FullScreenContentCallback(
       onAdDismissedFullScreenContent: (ad) {
         ad.dispose();
