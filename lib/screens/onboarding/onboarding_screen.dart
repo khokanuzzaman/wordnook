@@ -86,6 +86,8 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     if (_finished) return;
     _finished = true;
     await widget.storage.setOnboardingSeen();
+    // New players warm up on three easy Journey levels before the Daily.
+    await widget.storage.setFirstStepsActive(true);
     // Reminder is opt-in: if the player never tapped "Turn on" (or skipped),
     // leave it OFF so nothing nudges them and Settings reflects the truth. The
     // default is on, so we set it explicitly here.
@@ -143,7 +145,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
         streakCount: 1,
         reminderTimeLabel: label,
         onTurnOnReminder: _turnOnReminder,
-        onPlayDaily: () {
+        onContinue: () {
           Navigator.of(sheetContext).pop();
           _finish(won: true);
         },

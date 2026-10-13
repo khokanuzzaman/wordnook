@@ -10,6 +10,7 @@ import 'widgets/app_drawer.dart';
 import 'widgets/board_grid.dart';
 import 'widgets/board_info_bar.dart';
 import 'widgets/celebration_overlay.dart';
+import 'widgets/daily_ready_sheet.dart';
 import 'widgets/cozy_background.dart';
 import 'widgets/identity_header.dart';
 import 'widgets/keyboard.dart';
@@ -31,7 +32,9 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    c.startGame(GameMode.daily);
+    // A brand-new player starts on the warm-up Journey levels; everyone else
+    // opens on the Daily.
+    c.startGame(c.inFirstSteps ? GameMode.journey : GameMode.daily);
     c.addListener(_onChange);
     // A returning player whose daily is already finished should still see the
     // stats sheet — startGame ran before the listener was attached, so handle
@@ -91,11 +94,26 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       Future.delayed(const Duration(milliseconds: 700), () {
         if (mounted) StatisticsScreen.show(context, c);
       });
+    } else if (c.firstStepsJustCompleted) {
+      // Last warm-up cleared: point the new player at today's Daily, once.
+      Future.delayed(const Duration(milliseconds: 900), () {
+        if (mounted) _showDailyReady();
+      });
     }
+  }
+
+  Future<void> _showDailyReady() async {
+    final goDaily = await DailyReadySheet.show(context);
+    await c.endFirstSteps(AnalyticsFirstStepsEnd.warmedUp);
+    if (goDaily == true && mounted) _setMode(GameMode.daily);
   }
 
   void _setMode(GameMode mode) {
     if (c.mode == mode) return;
+    // Leaving the warm-up early for the Daily ends First Steps quietly.
+    if (mode == GameMode.daily && c.inFirstSteps) {
+      c.endFirstSteps(AnalyticsFirstStepsEnd.switchedToDaily);
+    }
     _endShown = false;
     c.startGame(mode);
     AnalyticsService.instance.logEvent(
@@ -140,6 +158,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         dailyNumber: c.dailyNumber,
                         level: c.journeyLevel,
                         chapter: c.journeyChapter,
+                        warmUpStep: c.warmUpStep,
+                        warmUpOf: GameController.firstStepsLevels,
                       ),
                       const SizedBox(height: 8),
                       Expanded(

@@ -60,6 +60,9 @@ class GameController extends ChangeNotifier {
   /// How many extra rows a player may buy per puzzle via "Keep going?".
   static const int maxExtraRows = 1;
 
+  /// Warm-up Journey levels a brand-new player plays before the Daily.
+  static const int firstStepsLevels = 3;
+
   /// Journey levels a new player clears before any interstitial can show.
   static const int journeyAdGraceLevels = 8;
   int get wordLength => WordRepository.wordLength;
@@ -416,6 +419,37 @@ class GameController extends ChangeNotifier {
       // The interstitial is NOT shown here — that would cover the win moment.
       // It is consulted when the player taps "Next level" ([nextJourneyLevel]).
     }
+  }
+
+  // --- First Steps ---------------------------------------------------------
+
+  /// Whether this player is still in the First Steps warm-up.
+  bool get inFirstSteps => _storage.firstStepsActive;
+
+  /// The warm-up number (1–[firstStepsLevels]) while a new player is on those
+  /// Journey levels, else null.
+  int? get warmUpStep => inFirstSteps &&
+          _mode == GameMode.journey &&
+          _journeyLevel <= firstStepsLevels
+      ? _journeyLevel
+      : null;
+
+  /// True right after the last warm-up level is solved — time to point the
+  /// player at today's Daily.
+  bool get firstStepsJustCompleted =>
+      inFirstSteps &&
+      _mode == GameMode.journey &&
+      _gameOver &&
+      _won &&
+      _journeyLevel > firstStepsLevels;
+
+  /// Ends First Steps (idempotent). [reason] is an [AnalyticsFirstStepsEnd].
+  Future<void> endFirstSteps(String reason) async {
+    if (!inFirstSteps) return;
+    await _storage.setFirstStepsActive(false);
+    _analytics.logEvent(AnalyticsEvents.firstStepsCompleted,
+        {AnalyticsParams.reason: reason});
+    notifyListeners();
   }
 
   /// Moves on from a solved Journey level. This tap — not the win itself — is

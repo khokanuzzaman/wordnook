@@ -271,6 +271,8 @@ void main() {
           reason: 'skip must not silently enable the reminder');
       expect(storage.coins, CoinRules.welcomeCoins,
           reason: 'skippers get the starter balance too');
+      expect(storage.firstStepsActive, isTrue,
+          reason: 'skippers also start with the warm-up');
     });
 
     testWidgets('winning sets the flag, seeds streak=1, leaves the daily free',
@@ -289,7 +291,7 @@ void main() {
       await tester.pumpAndSettle(); // win sheet
 
       expect(find.text('Nicely done.'), findsOneWidget);
-      await tester.tap(find.text("Play today's Daily"));
+      await tester.tap(find.text('Start warm-up'));
       await tester.pumpAndSettle();
 
       expect(finished, isTrue);
@@ -298,6 +300,8 @@ void main() {
       expect(storage.isDailyDone(), isFalse, reason: 'daily stays playable');
       expect(storage.coins, CoinRules.welcomeCoins,
           reason: 'a one-time starter balance, nothing else');
+      expect(storage.firstStepsActive, isTrue,
+          reason: 'a new player warms up on Journey before the Daily');
       expect(storage.reminderEnabled, isFalse,
           reason: 'ignoring the reminder card leaves it off');
     });

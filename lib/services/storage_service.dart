@@ -32,6 +32,8 @@ class StorageService {
       'last_recorded_date'; // yyyy-mm-dd of the last recorded daily result
   static const _kDailyWon = 'daily_won'; // bool: outcome of the saved board
   static const _kWelcomeCoins = 'welcome_coins_granted'; // bool, one-time
+  static const _kFirstSteps =
+      'first_steps_active'; // bool: new player is in the warm-up levels
   static const _kDailyExtraRows =
       'daily_extra_rows'; // int: rows bought for the board at [_kDailyDate]
 
@@ -466,6 +468,13 @@ class StorageService {
 
   bool get onboardingSeen => _prefs.getBool(_kOnboardingSeen) ?? false;
   Future<void> setOnboardingSeen() => _prefs.setBool(_kOnboardingSeen, true);
+
+  /// "First Steps": a brand-new player warms up on Journey levels 1–3 before
+  /// the Daily. Set only when the first-run tutorial finishes, so existing
+  /// players (who never see the new tutorial) are never affected.
+  bool get firstStepsActive => _prefs.getBool(_kFirstSteps) ?? false;
+  Future<void> setFirstStepsActive(bool value) =>
+      _prefs.setBool(_kFirstSteps, value);
 
   /// Seeds the real streak from a WON tutorial: the tutorial counts as today's
   /// streak-day, so the win screen's "1" is truthful and tomorrow's daily win

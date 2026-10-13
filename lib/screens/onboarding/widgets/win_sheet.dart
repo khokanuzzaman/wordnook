@@ -16,7 +16,8 @@ class WinSheet extends StatefulWidget {
   /// user taps "Turn on".
   final Future<bool> Function() onTurnOnReminder;
 
-  final VoidCallback onPlayDaily;
+  /// Primary CTA: leave the tutorial for the warm-up levels.
+  final VoidCallback onContinue;
   final VoidCallback onMaybeLater;
 
   const WinSheet({
@@ -25,7 +26,7 @@ class WinSheet extends StatefulWidget {
     required this.streakCount,
     required this.reminderTimeLabel,
     required this.onTurnOnReminder,
-    required this.onPlayDaily,
+    required this.onContinue,
     required this.onMaybeLater,
   });
 
@@ -280,16 +281,16 @@ class _WinSheetState extends State<WinSheet> {
       TextSpan(
         style: AppType.nunito(fontSize: 13, color: AppPalette.muted, height: 1.4),
         children: [
-          const TextSpan(text: "There's also "),
+          const TextSpan(text: 'Next: '),
           TextSpan(
-            text: 'Journey mode',
+            text: '3 quick warm-up words',
             style: AppType.nunito(
               fontSize: 13,
               color: AppPalette.ink,
               fontWeight: FontWeight.w700,
-            ).copyWith(decoration: TextDecoration.underline),
+            ),
           ),
-          const TextSpan(text: ' — a slow path of puzzles. Peek whenever.'),
+          const TextSpan(text: ", then today's Daily."),
         ],
       ),
     );
@@ -317,11 +318,11 @@ class _WinSheetState extends State<WinSheet> {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(16),
-          onTap: widget.onPlayDaily,
+          onTap: widget.onContinue,
           child: Padding(
             padding: const EdgeInsets.symmetric(vertical: 16),
             child: Center(
-              child: Text("Play today's Daily",
+              child: Text('Start warm-up',
                   style: AppType.fredoka(
                       fontSize: 17, color: const Color(0xFF0E1513))),
             ),

@@ -45,6 +45,10 @@ class AnalyticsEvents {
   static const continueAccepted = 'continue_accepted';
   static const continueDeclined = 'continue_declined';
 
+  // First Steps (new players' warm-up) and one-time tips.
+  static const firstStepsCompleted = 'first_steps_completed';
+  static const tipShown = 'tip_shown';
+
   // Journey mode.
   static const journeyLevelStarted = 'journey_level_started';
   static const journeyLevelCompleted = 'journey_level_completed';
@@ -88,6 +92,7 @@ class AnalyticsParams {
   static const to = 'to';
   static const step = 'step';
   static const via = 'via';
+  static const tip = 'tip';
 }
 
 /// Enum-like values for coin `source` (coins_earned).
@@ -97,6 +102,13 @@ class AnalyticsSources {
   static const journeyLevel = 'journey_level';
   static const watchAd = 'watch_ad';
   static const welcome = 'welcome';
+}
+
+/// Enum-like values for first_steps_completed `reason`.
+class AnalyticsFirstStepsEnd {
+  const AnalyticsFirstStepsEnd._();
+  static const warmedUp = 'warmed_up'; // cleared all warm-up levels
+  static const switchedToDaily = 'switched_to_daily'; // left early for Daily
 }
 
 /// Enum-like values for continue_accepted `via`.
