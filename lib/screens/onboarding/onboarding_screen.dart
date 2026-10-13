@@ -209,7 +209,11 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
               const SizedBox(height: 12),
             ],
-            Keyboard(keyStatus: c.keyStatus, onKey: c.onKey),
+            Keyboard(
+              keyStatus: c.keyStatus,
+              onKey: c.onKey,
+              compact: MediaQuery.sizeOf(context).height < 720,
+            ),
             const SizedBox(height: 8),
           ],
         ),

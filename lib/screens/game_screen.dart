@@ -256,6 +256,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         keyStatus: c.keyStatus,
                         onKey: c.onKey,
                         hintedLetters: c.revealedHints.values.toSet(),
+                        compact: compact,
                       ),
                     ],
                   ),

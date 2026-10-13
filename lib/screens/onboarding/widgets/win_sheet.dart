@@ -52,9 +52,10 @@ class _WinSheetState extends State<WinSheet> {
 
   @override
   Widget build(BuildContext context) {
+    // Scrolls on short phones (360×640) instead of overflowing.
     return SafeArea(
       top: false,
-      child: Padding(
+      child: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(22, 10, 22, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
