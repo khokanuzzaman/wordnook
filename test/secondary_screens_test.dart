@@ -59,7 +59,13 @@ void main() {
       );
 
       // Every theme is listed.
-      for (final name in ['Cozy', 'Forest', 'Sunset', 'Mono', 'High contrast']) {
+      for (final name in [
+        'Cozy',
+        'Forest',
+        'Sunset',
+        'Mono',
+        'High contrast'
+      ]) {
         expect(find.text(name), findsOneWidget, reason: '$name should render');
       }
 
@@ -85,8 +91,8 @@ void main() {
         SettingsScreen(storage: storage, coins: CoinService(storage)),
       );
 
-      final opacity = tester.widget<Opacity>(
-          find.byKey(const Key('reminder-time-dim')));
+      final opacity =
+          tester.widget<Opacity>(find.byKey(const Key('reminder-time-dim')));
       expect(opacity.opacity, 0.4);
     });
 
@@ -97,8 +103,8 @@ void main() {
         SettingsScreen(storage: storage, coins: CoinService(storage)),
       );
 
-      final opacity = tester.widget<Opacity>(
-          find.byKey(const Key('reminder-time-dim')));
+      final opacity =
+          tester.widget<Opacity>(find.byKey(const Key('reminder-time-dim')));
       expect(opacity.opacity, 1.0);
     });
   });
@@ -136,6 +142,39 @@ void main() {
     });
   });
 
+  group('Statistics — banner ad only in Journey', () {
+    Future<GameController> controllerFor(GameMode mode) async {
+      final storage = await _storage({});
+      final controller = GameController(
+        words: WordRepository()..debugLoad(['CRANE', 'SLATE', 'BRINE']),
+        storage: storage,
+        coins: CoinService(storage),
+        ads: _FakeAds(),
+      );
+      controller.startGame(mode);
+      return controller;
+    }
+
+    // BannerAdSlot.debugDisabled keeps the slot off the AdMob plugin, so the
+    // slot is present in the tree (as a zero-size widget) without loading an ad.
+    testWidgets('Daily: no banner slot', (tester) async {
+      BannerAdSlot.debugDisabled = true;
+      final controller = await controllerFor(GameMode.daily);
+      await _pump(tester, StatisticsScreen(controller: controller));
+
+      expect(find.text('Statistics'), findsOneWidget);
+      expect(find.byType(BannerAdSlot), findsNothing);
+    });
+
+    testWidgets('Journey: banner slot present', (tester) async {
+      BannerAdSlot.debugDisabled = true;
+      final controller = await controllerFor(GameMode.journey);
+      await _pump(tester, StatisticsScreen(controller: controller));
+
+      expect(find.byType(BannerAdSlot), findsOneWidget);
+    });
+  });
+
   group('How to play — the three worked examples render', () {
     testWidgets('shows the intro, three example rows, and the info note',
         (tester) async {
@@ -147,7 +186,8 @@ void main() {
       expect(find.textContaining('BREAD'), findsOneWidget);
       expect(find.textContaining('CRUMB'), findsOneWidget);
       expect(find.textContaining('TOAST'), findsOneWidget);
-      expect(find.textContaining('A new word arrives every day'), findsOneWidget);
+      expect(
+          find.textContaining('A new word arrives every day'), findsOneWidget);
     });
   });
 }

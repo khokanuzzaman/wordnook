@@ -19,7 +19,8 @@ class StatisticsScreen extends StatelessWidget {
   static Future<void> show(BuildContext context, GameController controller) {
     AnalyticsService.instance.logEvent(AnalyticsEvents.statsOpened);
     return Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => StatisticsScreen(controller: controller)),
+      MaterialPageRoute(
+          builder: (_) => StatisticsScreen(controller: controller)),
     );
   }
 
@@ -46,7 +47,8 @@ class StatisticsScreen extends StatelessWidget {
                         const SizedBox(height: 18),
                         Row(
                           children: [
-                            _StatCard(value: '${s.gamesPlayed}', label: 'Played'),
+                            _StatCard(
+                                value: '${s.gamesPlayed}', label: 'Played'),
                             const SizedBox(width: 9),
                             _StatCard(
                                 value: '${(s.winRate * 100).round()}',
@@ -73,8 +75,12 @@ class StatisticsScreen extends StatelessWidget {
                         ],
                         const SizedBox(height: 22),
                         _ShareButton(controller: controller),
-                        const SizedBox(height: 14),
-                        const BannerAdSlot(),
+                        // Daily stays clean: the banner is a Journey-only slot,
+                        // and its spacer goes with it (no empty gap).
+                        if (controller.mode == GameMode.journey) ...[
+                          const SizedBox(height: 14),
+                          const BannerAdSlot(),
+                        ],
                       ],
                     ),
                   ),
@@ -211,8 +217,8 @@ class _DistRow extends StatelessWidget {
         SizedBox(
           width: 12,
           child: Text('$rowNumber',
-              style: AppType.fredoka(
-                  fontSize: 14, color: AppPalette.iconStroke)),
+              style:
+                  AppType.fredoka(fontSize: 14, color: AppPalette.iconStroke)),
         ),
         const SizedBox(width: 10),
         Expanded(
@@ -225,8 +231,9 @@ class _DistRow extends StatelessWidget {
                 alignment: Alignment.centerLeft,
                 child: TweenAnimationBuilder<double>(
                   tween: Tween(begin: animate ? 0.0 : frac, end: frac),
-                  duration:
-                      animate ? const Duration(milliseconds: 600) : Duration.zero,
+                  duration: animate
+                      ? const Duration(milliseconds: 600)
+                      : Duration.zero,
                   curve: Curves.easeOut,
                   builder: (context, t, __) => FractionallySizedBox(
                     widthFactor: t,
@@ -315,7 +322,8 @@ class _ShareButton extends StatelessWidget {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.ios_share, size: 18, color: AppPalette.onTealInk),
+                  const Icon(Icons.ios_share,
+                      size: 18, color: AppPalette.onTealInk),
                   const SizedBox(width: 8),
                   Text('Share result',
                       style: AppType.fredoka(
