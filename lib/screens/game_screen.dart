@@ -40,7 +40,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     _idleTip = null;
     if (!c.idleTipEligible) return;
     _idleTip = Timer(TipRules.idleDelay, () {
-      if (mounted) c.showIdleTip();
+      // Only if the board is actually on screen (no drawer, sheet or route on
+      // top) — otherwise the tip would be "seen" by nobody.
+      if (mounted && (ModalRoute.of(context)?.isCurrent ?? true)) {
+        c.showIdleTip();
+      }
     });
   }
 
@@ -65,6 +69,13 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    // The idle-tip clock only runs while the app is in the foreground.
+    if (state == AppLifecycleState.resumed) {
+      _armIdleTip();
+    } else {
+      _idleTip?.cancel();
+      _idleTip = null;
+    }
     // Roll the daily over live: if the app was open across midnight, reload
     // the new day's puzzle (and its number) on resume instead of showing a
     // stale board.
@@ -114,17 +125,22 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
       Future.delayed(const Duration(milliseconds: 700), () {
         if (mounted) StatisticsScreen.show(context, c);
       });
-    } else if (c.firstStepsJustCompleted) {
-      // Last warm-up cleared: point the new player at today's Daily, once.
+    } else if (c.takeDailyReadyPending()) {
+      // Last warm-up cleared: point the new player at today's Daily, once —
+      // unless they already moved on (Next level / Daily tab) in the delay.
       Future.delayed(const Duration(milliseconds: 900), () {
-        if (mounted) _showDailyReady();
+        if (mounted &&
+            c.mode == GameMode.journey &&
+            c.gameOver &&
+            c.won) {
+          _showDailyReady();
+        }
       });
     }
   }
 
   Future<void> _showDailyReady() async {
     final goDaily = await DailyReadySheet.show(context);
-    await c.endFirstSteps(AnalyticsFirstStepsEnd.warmedUp);
     if (goDaily == true && mounted) _setMode(GameMode.daily);
   }
 

@@ -73,12 +73,17 @@ void main() {
       c.startGame(GameMode.journey);
       for (var n = 1; n <= GameController.firstStepsLevels; n++) {
         expect(c.warmUpStep, n);
-        expect(c.firstStepsJustCompleted, isFalse);
         await _solve(c);
-        if (n < GameController.firstStepsLevels) c.nextJourneyLevel();
+        if (n < GameController.firstStepsLevels) {
+          expect(c.takeDailyReadyPending(), isFalse);
+          c.nextJourneyLevel();
+        }
       }
-      expect(c.firstStepsJustCompleted, isTrue,
-          reason: 'solving the last warm-up is the moment for the Daily card');
+      // Solving the last warm-up ends First Steps right away (a killed app
+      // can't leave the player stuck in it) and queues the Daily card once.
+      expect(s.firstStepsActive, isFalse);
+      expect(c.takeDailyReadyPending(), isTrue);
+      expect(c.takeDailyReadyPending(), isFalse, reason: 'one-shot');
       c.nextJourneyLevel();
       expect(c.warmUpStep, isNull, reason: 'level 4 is a normal level');
     });

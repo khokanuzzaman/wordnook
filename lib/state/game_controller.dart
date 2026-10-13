@@ -118,6 +118,10 @@ class GameController extends ChangeNotifier {
   int _extraRows = 0;
   bool _awaitingContinue = false;
   bool _settlingAbandoned = false;
+
+  // Set when the last warm-up level is solved; the screen shows the one-time
+  // "You're ready" sheet and clears it.
+  bool _dailyReadyPending = false;
   final List<String> _guesses = [];
   String _current = '';
   bool _gameOver = false;
@@ -466,6 +470,14 @@ class GameController extends ChangeNotifier {
         AnalyticsParams.source: AnalyticsSources.journeyLevel,
       });
       _analytics.syncJourney(_journeyLevel);
+      // Last warm-up solved: First Steps ends NOW (so a killed app can't leave
+      // a player stuck in it), and the screen shows the Daily card once.
+      if (inFirstSteps && completedLevel >= firstStepsLevels) {
+        _dailyReadyPending = true;
+        await _storage.setFirstStepsActive(false);
+        _analytics.logEvent(AnalyticsEvents.firstStepsCompleted,
+            {AnalyticsParams.reason: AnalyticsFirstStepsEnd.warmedUp});
+      }
       // The interstitial is NOT shown here — that would cover the win moment.
       // It is consulted when the player taps "Next level" ([nextJourneyLevel]).
     }
@@ -484,14 +496,13 @@ class GameController extends ChangeNotifier {
       ? _journeyLevel
       : null;
 
-  /// True right after the last warm-up level is solved — time to point the
-  /// player at today's Daily.
-  bool get firstStepsJustCompleted =>
-      inFirstSteps &&
-      _mode == GameMode.journey &&
-      _gameOver &&
-      _won &&
-      _journeyLevel > firstStepsLevels;
+  /// True once, right after the last warm-up level is solved — time to point
+  /// the player at today's Daily. Reading it clears it.
+  bool takeDailyReadyPending() {
+    final v = _dailyReadyPending;
+    _dailyReadyPending = false;
+    return v;
+  }
 
   /// Ends First Steps (idempotent). [reason] is an [AnalyticsFirstStepsEnd].
   Future<void> endFirstSteps(String reason) async {
@@ -655,7 +666,8 @@ class GameController extends ChangeNotifier {
       answer: _answer,
       won: _won,
       maxGuesses: maxGuesses,
-      streak: _mode == GameMode.daily ? _stats.currentStreak : null,
+      // The flame only rides on a solved Daily.
+      streak: _mode == GameMode.daily && _won ? _stats.currentStreak : null,
       link: Branding.playStoreUrl,
     );
   }

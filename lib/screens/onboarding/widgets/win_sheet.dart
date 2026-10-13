@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../models/letter_status.dart';
+import '../../../state/game_controller.dart';
 import '../../../theme/app_theme.dart';
 
 /// The win bottom sheet (screen 4): gentle celebration, the streak card where
@@ -283,7 +284,7 @@ class _WinSheetState extends State<WinSheet> {
         children: [
           const TextSpan(text: 'Next: '),
           TextSpan(
-            text: '3 quick warm-up words',
+            text: '${GameController.firstStepsLevels} quick warm-up words',
             style: AppType.nunito(
               fontSize: 13,
               color: AppPalette.ink,

@@ -167,13 +167,27 @@ class StorageService {
   /// in-progress level may have changed. A hint bought for the OLD word would
   /// show a wrong letter on the new one, so drop journey-scoped reveals. Daily
   /// reveals ("d:" scopes) are untouched — the daily word did not change.
+  ///
+  /// Also: one-time beginner tips are new in v7 and keyed on games finished.
+  /// An upgrading player already knows the game, so mark their tip window as
+  /// used. A fresh install has no history and is left alone.
   Future<void> _migrateToV7() async {
     final scope = _prefs.getString(_kHintScope);
     if (scope != null && scope.startsWith('j:')) {
       await _prefs.remove(_kHintScope);
       await _prefs.remove(_kHintReveals);
     }
+    final experienced = loadStats().gamesPlayed > 0 ||
+        (_prefs.getInt(_kJourneyLevel) ?? 1) > 1 ||
+        (_prefs.getBool(_kOnboardingSeen) ?? false);
+    if (experienced && gamesFinished < tipsWindowGames) {
+      await _prefs.setInt(_kGamesFinished, tipsWindowGames);
+    }
   }
+
+  /// Games after which beginner tips stop (mirrors TipRules.eligibleGames;
+  /// kept here so storage doesn't depend on the tip logic).
+  static const int tipsWindowGames = 5;
 
   /// Test seam for the v6 clamp with an injected clock.
   @visibleForTesting

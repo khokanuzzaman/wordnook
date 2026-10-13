@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:daily_word_game/data/word_repository.dart';
 import 'package:daily_word_game/logic/journey_ramp.dart';
+import 'package:daily_word_game/logic/tips.dart';
 import 'package:daily_word_game/services/storage_service.dart';
 
 List<String> _read(String path) => File(path)
@@ -187,6 +188,29 @@ void main() {
   });
 
   group('v7 migration', () {
+    test('an upgrading player skips the beginner tips; a fresh install does not',
+        () async {
+      SharedPreferences.setMockInitialValues({
+        'flutter.daily_map_version': 6,
+        'flutter.onboarding_seen': true,
+        'flutter.stats_v1': '{"gamesPlayed":12,"gamesWon":10,'
+            '"currentStreak":3,"bestStreak":5,'
+            '"guessDistribution":[0,0,2,4,3,1,0]}',
+      });
+      var s = StorageService();
+      await s.init();
+      expect(s.gamesFinished, StorageService.tipsWindowGames);
+
+      SharedPreferences.setMockInitialValues({});
+      s = StorageService();
+      await s.init();
+      expect(s.gamesFinished, 0);
+    });
+
+    test('the storage tips window matches TipRules', () {
+      expect(StorageService.tipsWindowGames, TipRules.eligibleGames);
+    });
+
     test('drops a journey hint, keeps a daily hint', () async {
       SharedPreferences.setMockInitialValues({
         'flutter.daily_map_version': 6,

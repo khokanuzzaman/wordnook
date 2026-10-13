@@ -43,6 +43,7 @@ void main() {
     final answer = words.dailyWord();
     // Mark today's daily as already completed (won).
     await storage.saveDailyProgress(guesses: [answer], done: true);
+    await storage.saveDailyOutcome(won: true);
 
     final controller = GameController(
         words: words,
