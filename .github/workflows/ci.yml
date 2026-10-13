@@ -33,8 +33,16 @@ jobs:
         run: flutter pub get
 
       # Analyze + test only: no signing keys, AdMob IDs or builds are needed.
+      # Same checks as `flutter analyze` (infos are fatal), but every issue is
+      # also emitted as a GitHub annotation so it shows inline on the PR diff.
       - name: Analyze
-        run: flutter analyze
+        run: |
+          if ! dart analyze --fatal-infos --format=machine > analyze.txt 2>&1; then
+            sed -n 's#^\([A-Z]*\)|[A-Z_]*|\([A-Z_]*\)|'"$GITHUB_WORKSPACE"'/\([^|]*\)|\([0-9]*\)|\([0-9]*\)|[0-9]*|\(.*\)$#::error file=\3,line=\4,col=\5::\1 \2: \6#p' analyze.txt
+            cat analyze.txt
+            exit 1
+          fi
+          echo "No issues found."
 
       - name: Test
-        run: flutter test
+        run: flutter test --reporter github
