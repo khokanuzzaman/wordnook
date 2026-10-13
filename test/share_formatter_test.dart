@@ -87,4 +87,36 @@ void main() {
     );
     expect(text.split('\n').first, 'Wordnook #650 6+1/6');
   });
+
+  group('streak + link', () {
+    String build({int? streak, String? link}) => ShareFormatter.build(
+          appName: 'Wordnook',
+          dayNumber: 650,
+          guesses: const ['SLATE', 'CRANE'],
+          answer: 'CRANE',
+          won: true,
+          maxGuesses: 6,
+          streak: streak,
+          link: link,
+        );
+
+    test('a streak of 2+ rides on the header', () {
+      expect(build(streak: 5).split('\n').first, 'Wordnook #650 2/6 🔥5');
+    });
+
+    test('a streak under 2 is left off', () {
+      expect(build(streak: 1).split('\n').first, 'Wordnook #650 2/6');
+      expect(build().split('\n').first, 'Wordnook #650 2/6');
+    });
+
+    test('the link is the last line', () {
+      final text = build(link: 'https://example.com/app');
+      expect(text.split('\n').last, 'Play: https://example.com/app');
+      expect(text, contains('🔵🔵🔵🔵🔵'));
+    });
+
+    test('no link, no footer', () {
+      expect(build().contains('Play:'), isFalse);
+    });
+  });
 }

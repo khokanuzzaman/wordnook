@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:share_plus/share_plus.dart';
 
 import '../models/game_result.dart';
 import '../services/analytics_service.dart';
@@ -8,6 +7,7 @@ import '../theme/app_theme.dart';
 import 'widgets/banner_ad_slot.dart';
 import 'widgets/cozy_background.dart';
 import 'widgets/secondary_header.dart';
+import 'widgets/share_action.dart';
 
 /// Statistics (addendum §C): a warm full screen — cozy streak line, four stat
 /// cards, the guess-distribution bars (best row highlighted), and Share. Daily
@@ -289,14 +289,7 @@ class _ShareButton extends StatelessWidget {
         child: InkWell(
           borderRadius: BorderRadius.circular(15),
           onTap: enabled
-              ? () {
-                  AnalyticsService.instance.logEvent(
-                    AnalyticsEvents.shareResult,
-                    {AnalyticsParams.mode: controller.mode.name},
-                  );
-                  SharePlus.instance
-                      .share(ShareParams(text: controller.shareText!));
-                }
+              ? () => shareResult(controller, from: 'stats_sheet')
               : null,
           child: Ink(
             decoration: BoxDecoration(

@@ -655,6 +655,8 @@ class GameController extends ChangeNotifier {
       answer: _answer,
       won: _won,
       maxGuesses: maxGuesses,
+      streak: _mode == GameMode.daily ? _stats.currentStreak : null,
+      link: Branding.playStoreUrl,
     );
   }
 

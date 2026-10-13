@@ -18,6 +18,7 @@ import 'widgets/cozy_background.dart';
 import 'widgets/identity_header.dart';
 import 'widgets/keyboard.dart';
 import 'widgets/mode_switcher.dart';
+import 'widgets/share_action.dart';
 import 'widgets/toast.dart';
 
 class GameScreen extends StatefulWidget {
@@ -389,6 +390,17 @@ class _EndActions extends StatelessWidget {
   Widget build(BuildContext context) {
     final c = controller;
     if (c.awaitingContinue) return _KeepGoingCard(controller: c);
+    // A solved Daily: share right from the board (the stats sheet has one too).
+    if (c.gameOver && c.won && c.mode == GameMode.daily) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 8, top: 4),
+        child: FilledButton.icon(
+          onPressed: () => shareResult(c, from: 'board'),
+          icon: const Icon(Icons.ios_share, size: 18),
+          label: const Text('Share'),
+        ),
+      );
+    }
     if (!c.gameOver || c.mode != GameMode.journey) {
       return const SizedBox(height: 8);
     }
