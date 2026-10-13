@@ -8,6 +8,7 @@ import '../data/word_repository.dart';
 import '../logic/coin_rules.dart';
 import '../logic/game_engine.dart';
 import '../logic/share_formatter.dart';
+import '../logic/tips.dart';
 import '../models/game_result.dart';
 import '../models/letter_status.dart';
 import '../services/ads_service.dart';
@@ -303,6 +304,8 @@ class GameController extends ChangeNotifier {
       }
     }
 
+    final keyStatusBefore = Map<String, LetterStatus>.of(_keyStatus);
+    final guess = _current;
     _applyToKeyboard(_current);
     _guesses.add(_current);
     final solved = _current == _answer;
@@ -329,7 +332,54 @@ class GameController extends ChangeNotifier {
       _message = _lossMessage;
     }
 
+    if (!_gameOver) {
+      _maybeTipAfterGuess(guess, keyStatusBefore);
+    } else {
+      await _storage.incrementGamesFinished();
+    }
     await _settle();
+    notifyListeners();
+  }
+
+  // --- One-time tips -------------------------------------------------------
+
+  Set<Tip> get _tipsSeen => {
+        for (final id in _storage.tipsSeen)
+          if (TipRules.fromId(id) case final t?) t,
+      };
+
+  void _maybeTipAfterGuess(String guess, Map<String, LetterStatus> before) {
+    final pick = TipRules.afterGuess(
+      guess: guess,
+      statuses: GameEngine.evaluateGuess(guess, _answer),
+      keyStatusBefore: before,
+      seen: _tipsSeen,
+      gamesFinished: _storage.gamesFinished,
+    );
+    if (pick == null) return;
+    _showTip(pick.$1, pick.$2);
+  }
+
+  void _showTip(Tip tip, [String? letter]) {
+    _message = TipRules.text(tip, letter);
+    unawaited(_storage.markTipSeen(TipRules.id(tip)));
+    _analytics.logEvent(
+        AnalyticsEvents.tipShown, {AnalyticsParams.tip: TipRules.id(tip)});
+  }
+
+  /// Whether the idle "try STARE" tip could show right now (empty board, a
+  /// new player's first games, not seen yet). The screen runs the timer.
+  bool get idleTipEligible =>
+      acceptingInput &&
+      _guesses.isEmpty &&
+      _current.isEmpty &&
+      TipRules.idleEligible(
+          seen: _tipsSeen, gamesFinished: _storage.gamesFinished);
+
+  /// Shows the idle tip if it is still relevant (called by the screen's timer).
+  void showIdleTip() {
+    if (!idleTipEligible) return;
+    _showTip(Tip.idleStart);
     notifyListeners();
   }
 
@@ -518,6 +568,7 @@ class GameController extends ChangeNotifier {
     if (!_awaitingContinue) return;
     _awaitingContinue = false;
     _gameOver = true;
+    await _storage.incrementGamesFinished();
     _message = _lossMessage;
     _analytics.logEvent(AnalyticsEvents.continueDeclined,
         {AnalyticsParams.mode: _mode.name});

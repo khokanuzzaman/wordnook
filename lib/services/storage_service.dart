@@ -32,6 +32,9 @@ class StorageService {
       'last_recorded_date'; // yyyy-mm-dd of the last recorded daily result
   static const _kDailyWon = 'daily_won'; // bool: outcome of the saved board
   static const _kWelcomeCoins = 'welcome_coins_granted'; // bool, one-time
+  static const _kTipsSeen = 'tips_seen'; // csv of one-time tip ids
+  static const _kGamesFinished =
+      'games_finished'; // int: Daily + Journey games ended (tips window)
   static const _kFirstSteps =
       'first_steps_active'; // bool: new player is in the warm-up levels
   static const _kDailyExtraRows =
@@ -468,6 +471,22 @@ class StorageService {
 
   bool get onboardingSeen => _prefs.getBool(_kOnboardingSeen) ?? false;
   Future<void> setOnboardingSeen() => _prefs.setBool(_kOnboardingSeen, true);
+
+  /// One-time tips already shown (by id).
+  Set<String> get tipsSeen => (_prefs.getString(_kTipsSeen) ?? '')
+      .split(',')
+      .where((s) => s.isNotEmpty)
+      .toSet();
+
+  Future<void> markTipSeen(String id) async {
+    final seen = tipsSeen..add(id);
+    await _prefs.setString(_kTipsSeen, seen.join(','));
+  }
+
+  /// Games finished in either mode — new players get tips for their first few.
+  int get gamesFinished => _prefs.getInt(_kGamesFinished) ?? 0;
+  Future<void> incrementGamesFinished() =>
+      _prefs.setInt(_kGamesFinished, gamesFinished + 1);
 
   /// "First Steps": a brand-new player warms up on Journey levels 1–3 before
   /// the Daily. Set only when the first-run tutorial finishes, so existing

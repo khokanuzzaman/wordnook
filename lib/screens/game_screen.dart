@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../branding.dart';
 import '../logic/coin_rules.dart';
+import '../logic/tips.dart';
 import '../services/analytics_service.dart';
 import '../state/game_controller.dart';
 import '../theme/app_theme.dart';
@@ -28,6 +31,18 @@ class GameScreen extends StatefulWidget {
 class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   GameController get c => widget.controller;
 
+  // Runs the one-time "Not sure? Try STARE" tip after an idle empty board.
+  Timer? _idleTip;
+
+  void _armIdleTip() {
+    _idleTip?.cancel();
+    _idleTip = null;
+    if (!c.idleTipEligible) return;
+    _idleTip = Timer(TipRules.idleDelay, () {
+      if (mounted) c.showIdleTip();
+    });
+  }
+
   @override
   void initState() {
     super.initState();
@@ -36,6 +51,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     // opens on the Daily.
     c.startGame(c.inFirstSteps ? GameMode.journey : GameMode.daily);
     c.addListener(_onChange);
+    _armIdleTip();
     // A returning player whose daily is already finished should still see the
     // stats sheet — startGame ran before the listener was attached, so handle
     // that initial game-over case explicitly.
@@ -59,12 +75,15 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _idleTip?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     c.removeListener(_onChange);
     super.dispose();
   }
 
   void _onChange() {
+    // Any activity restarts (or cancels) the idle-tip clock.
+    _armIdleTip();
     // The game re-opened (new game or a rewarded extra guess) — allow the
     // end-of-game flow to fire again next time.
     if (!c.gameOver) _endShown = false;
