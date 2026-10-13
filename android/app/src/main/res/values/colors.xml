@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <!-- Adaptive launcher icon background (matches the app's dark surface). -->
-    <color name="ic_launcher_background">#14181B</color>
+    <!-- Adaptive launcher icon background (matches the edge of the nook icon art). -->
+    <color name="ic_launcher_background">#170E0A</color>
 </resources>
