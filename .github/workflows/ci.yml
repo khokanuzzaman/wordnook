@@ -55,11 +55,15 @@ jobs:
               (map(select(.type == "testStart"))
                 | map({key: (.test.id | tostring), value: .test})
                 | from_entries) as $tests
-              | map(select(.type == "error"))[]
-              | . as $e
-              | $tests[($e.testID | tostring)] as $t
+              | (map(select(.type == "print"))) as $prints
+              | map(select(.type == "error"))
+              | group_by(.testID)[]
+              | .[0].testID as $id
+              | $tests[($id | tostring)] as $t
+              | (($prints | map(select(.testID == $id) | .message))
+                  + map(.error) | join("%0A----%0A")) as $msg
               | "::error file=\(($t.root_url // $t.url // "")
-                    | sub("^file://" + env.GITHUB_WORKSPACE + "/"; "")),line=\($t.root_line // $t.line // 1),title=\($t.name | gsub("[,:]"; " "))::\(($e.error + "%0A" + ($e.stackTrace // "")) | .[0:2000] | gsub("\n"; "%0A"))"
+                    | sub("^file://" + env.GITHUB_WORKSPACE + "/"; "")),line=\($t.root_line // $t.line // 1),title=\($t.name | gsub("[,:]"; " "))::\($msg | .[0:6000] | gsub("\n"; "%0A"))"
             ' test-report.json
           fi
           exit $status
