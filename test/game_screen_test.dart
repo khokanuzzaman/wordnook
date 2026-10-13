@@ -66,8 +66,9 @@ void main() {
 
     expect(find.text('Statistics'), findsOneWidget);
     expect(find.text('GUESS DISTRIBUTION'), findsOneWidget);
-    // A solved Daily also offers Share right on the board.
-    expect(find.text('Share'), findsOneWidget);
+    // A solved Daily also offers Share right on the board (behind the
+    // Statistics route, hence offstage).
+    expect(find.text('Share', skipOffstage: false), findsOneWidget);
   });
 
   testWidgets('winning the daily shows the celebration overlay',
