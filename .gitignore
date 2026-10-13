@@ -46,3 +46,6 @@ app.*.map.json
 
 # iOS AdMob real app id (mirrors android/admob.properties; never commit)
 **/ios/Flutter/AdMob.secret.xcconfig
+
+# Raw phone captures for the store screenshot composer
+store/raw/
