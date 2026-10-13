@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 
 import '../../logic/countdown.dart';
+import '../../logic/journey_labels.dart';
 import '../../state/game_controller.dart';
 import '../../theme/app_theme.dart';
 
@@ -45,10 +46,8 @@ class _BoardInfoBarState extends State<BoardInfoBar> {
 
   GameController get c => widget.controller;
   bool get _isEmpty => c.guesses.isEmpty && !c.gameOver;
-  bool get _solvedDaily =>
-      c.mode == GameMode.daily && c.gameOver && c.won;
-  bool get _solvedJourney =>
-      c.mode == GameMode.journey && c.gameOver && c.won;
+  bool get _solvedDaily => c.mode == GameMode.daily && c.gameOver && c.won;
+  bool get _solvedJourney => c.mode == GameMode.journey && c.gameOver && c.won;
 
   @override
   Widget build(BuildContext context) {
@@ -89,7 +88,7 @@ class _BoardInfoBarState extends State<BoardInfoBar> {
 
   Widget _streakChip() {
     final label = c.mode == GameMode.journey
-        ? '${c.journeyLevel} levels cleared'
+        ? levelsClearedLabel(c.journeyLevel - 1)
         : '${c.stats.currentStreak}-day streak';
     return _chip(
       icon: Icons.local_fire_department,
