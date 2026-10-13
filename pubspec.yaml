@@ -27,6 +27,9 @@ flutter:
   uses-material-design: true
   assets:
     - assets/words/answers.txt
+    - assets/words/answers_easy.txt
+    - assets/words/answers_medium.txt
+    - assets/words/answers_hard.txt
     - assets/words/allowed.txt
   # Bundled so fonts render fully offline with no first-launch pop-in. These are
   # variable fonts; Flutter applies the weight axis from TextStyle.fontWeight.

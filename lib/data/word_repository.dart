@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:flutter/services.dart' show rootBundle;
 
 import '../logic/deterministic_shuffle.dart';
+import '../logic/journey_ramp.dart';
 import '../models/word_pack.dart';
 
 /// Loads word lists and selects words. Answers (the curated, fair list of
@@ -29,6 +30,26 @@ class WordRepository {
   List<String> _answers = const [];
   Set<String> _allowed = const {};
   List<WordPack> _packs = const [];
+
+  /// Difficulty tiers for Journey (subsets of [_answers]); see
+  /// assets/words/README.md. Empty until loaded — then every tier falls back
+  /// to the full answer list.
+  Map<WordTier, List<String>> _tierWords = const {};
+
+  /// Each tier's fixed Journey play order (seeded shuffle of that tier).
+  Map<WordTier, List<String>> _tierOrder = const {};
+
+  static const Map<WordTier, String> _tierAssets = {
+    WordTier.easy: 'assets/words/answers_easy.txt',
+    WordTier.medium: 'assets/words/answers_medium.txt',
+    WordTier.hard: 'assets/words/answers_hard.txt',
+  };
+
+  static const Map<WordTier, int> _tierSeeds = {
+    WordTier.easy: 0x7E1E,
+    WordTier.medium: 0x7E2E,
+    WordTier.hard: 0x7E3E,
+  };
 
   /// Deterministic permutation of [_answers] that the daily walks in order.
   List<String> _dailyOrder = const [];
@@ -80,6 +101,15 @@ class WordRepository {
     } catch (_) {
       _useFallback();
     }
+    final tiers = <WordTier, List<String>>{};
+    for (final e in _tierAssets.entries) {
+      try {
+        tiers[e.key] = _parse(await rootBundle.loadString(e.value));
+      } catch (_) {
+        // Missing tier file: that tier falls back to the full answer list.
+      }
+    }
+    _tierWords = tiers;
     _rebuildOrders();
   }
 
@@ -90,10 +120,18 @@ class WordRepository {
 
   /// Test seam: load word lists directly, bypassing asset I/O.
   @visibleForTesting
-  void debugLoad(List<String> answers, {Set<String>? allowed}) {
+  void debugLoad(
+    List<String> answers, {
+    Set<String>? allowed,
+    Map<WordTier, List<String>>? tiers,
+  }) {
     _answers = answers.map((w) => w.toUpperCase()).toList();
     _allowed = (allowed?.map((w) => w.toUpperCase()).toSet() ?? <String>{})
       ..addAll(_answers);
+    _tierWords = {
+      for (final e in (tiers ?? const <WordTier, List<String>>{}).entries)
+        e.key: e.value.map((w) => w.toUpperCase()).toList(),
+    };
     _rebuildOrders();
   }
 
@@ -104,6 +142,26 @@ class WordRepository {
   void _rebuildOrders() {
     _dailyOrder = DeterministicShuffle.shuffled(_answers, _dailySeed);
     _buildPacks();
+    _buildTierOrders();
+  }
+
+  /// Each tier's Journey play order. A tier word that isn't an answer is
+  /// dropped; an empty or missing tier falls back to all answers, so Journey
+  /// always has words even before tier files exist.
+  void _buildTierOrders() {
+    final answerSet = _answers.toSet();
+    _tierOrder = {
+      for (final t in WordTier.values)
+        t: DeterministicShuffle.shuffled(
+          () {
+            final words = (_tierWords[t] ?? const <String>[])
+                .where(answerSet.contains)
+                .toList();
+            return words.isEmpty ? _answers : words;
+          }(),
+          _tierSeeds[t]!,
+        ),
+    };
   }
 
   /// Builds the Journey packs. For now there is a single default "Everyday"
@@ -156,8 +214,18 @@ class WordRepository {
       ? _packs.first
       : WordPack(id: 'everyday', name: 'Everyday', answers: _answers);
 
-  /// The answer for a Journey [level] (1-based) in the default pack.
-  String wordForLevel(int level) => defaultPack.wordForLevel(level);
+  /// The Journey answer for a 1-based [level]. The level's difficulty tier
+  /// comes from [JourneyRamp]; [attempt] > 0 (a retry after a loss) picks a
+  /// different word from the same tier. Same level + attempt = same word on
+  /// every device.
+  String journeyWord(int level, {int attempt = 0}) {
+    final order = _tierOrder[JourneyRamp.tierFor(level)] ?? const <String>[];
+    if (order.isEmpty) return defaultPack.wordForLevel(level);
+    return order[JourneyRamp.indexFor(level, order.length, attempt: attempt)];
+  }
+
+  /// The canonical Journey answer for a 1-based [level].
+  String wordForLevel(int level) => journeyWord(level);
 
   /// Whether [word] is an acceptable guess.
   bool isAllowed(String word) => _allowed.contains(word.toUpperCase());

@@ -43,7 +43,8 @@ class StorageService {
   ///   v4 — backfill [_kDailyWon] so the outcome is stored, not inferred
   ///   v5 — backfill [_kOnboardingSeen] for existing players (new tutorial)
   ///   v6 — day keys switch from UTC to the device's local date
-  static const int _schemaVersion = 6;
+  ///   v7 — Journey words now follow difficulty tiers; drop stale journey hints
+  static const int _schemaVersion = 7;
 
   late final SharedPreferences _prefs;
 
@@ -63,6 +64,7 @@ class StorageService {
     if (from < 4) await _migrateToV4();
     if (from < 5) await _migrateToV5();
     if (from < 6) await _migrateToV6();
+    if (from < 7) await _migrateToV7();
     await _prefs.setInt(_kDailyMapVersion, _schemaVersion);
   }
 
@@ -153,6 +155,18 @@ class StorageService {
       await _prefs.remove(_kDailyDone);
       await _prefs.remove(_kDailyWon);
       await _prefs.remove(_kDailyExtraRows);
+    }
+  }
+
+  /// v7 — Journey levels now draw from difficulty tiers, so the word for an
+  /// in-progress level may have changed. A hint bought for the OLD word would
+  /// show a wrong letter on the new one, so drop journey-scoped reveals. Daily
+  /// reveals ("d:" scopes) are untouched — the daily word did not change.
+  Future<void> _migrateToV7() async {
+    final scope = _prefs.getString(_kHintScope);
+    if (scope != null && scope.startsWith('j:')) {
+      await _prefs.remove(_kHintScope);
+      await _prefs.remove(_kHintReveals);
     }
   }
 

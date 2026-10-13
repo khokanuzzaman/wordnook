@@ -92,7 +92,7 @@ class GameController extends ChangeNotifier {
   // after a loss shows a different word (but the level number is unchanged).
   int _journeyAttempt = 0;
   String _journeyWord() =>
-      _words.wordForLevel(_journeyLevel + _journeyAttempt * 7919);
+      _words.journeyWord(_journeyLevel, attempt: _journeyAttempt);
 
   /// Social-proof stat for the current Journey level.
   int get journeySolvedPercent => solvedPercentForLevel(_journeyLevel);
