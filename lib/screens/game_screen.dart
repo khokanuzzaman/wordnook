@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../branding.dart';
 import '../logic/coin_rules.dart';
+import '../logic/countdown.dart';
 import '../logic/tips.dart';
 import '../services/analytics_service.dart';
 import '../state/game_controller.dart';
@@ -34,15 +35,39 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   // Runs the one-time "Not sure? Try STARE" tip after an idle empty board.
   Timer? _idleTip;
+  bool _drawerOpen = false;
+
+  // Fires just after local midnight so an open app moves to the new Daily.
+  Timer? _midnight;
+
+  void _armMidnight() {
+    _midnight?.cancel();
+    _midnight = Timer(
+        timeUntilNextDaily() + const Duration(seconds: 1), _onMidnight);
+  }
+
+  void _onMidnight() {
+    if (!mounted) return;
+    // Roll over only when nothing is in progress — never wipe a half-played
+    // board. A mid-game player keeps it until they finish or resume the app.
+    final idle = c.gameOver || (c.guesses.isEmpty && c.current.isEmpty);
+    if (c.dailyNeedsRefresh && idle) {
+      _endShown = false;
+      c.startGame(GameMode.daily);
+    }
+    _armMidnight();
+  }
 
   void _armIdleTip() {
     _idleTip?.cancel();
     _idleTip = null;
-    if (!c.idleTipEligible) return;
+    if (!c.idleTipEligible || _drawerOpen) return;
     _idleTip = Timer(TipRules.idleDelay, () {
       // Only if the board is actually on screen (no drawer, sheet or route on
       // top) — otherwise the tip would be "seen" by nobody.
-      if (mounted && (ModalRoute.of(context)?.isCurrent ?? true)) {
+      if (mounted &&
+          !_drawerOpen &&
+          (ModalRoute.of(context)?.isCurrent ?? true)) {
         c.showIdleTip();
       }
     });
@@ -57,6 +82,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     c.startGame(c.inFirstSteps ? GameMode.journey : GameMode.daily);
     c.addListener(_onChange);
     _armIdleTip();
+    _armMidnight();
     // A returning player whose daily is already finished should still see the
     // stats sheet — startGame ran before the listener was attached, so handle
     // that initial game-over case explicitly.
@@ -72,6 +98,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
     // The idle-tip clock only runs while the app is in the foreground.
     if (state == AppLifecycleState.resumed) {
       _armIdleTip();
+      _armMidnight();
     } else {
       _idleTip?.cancel();
       _idleTip = null;
@@ -88,6 +115,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
   @override
   void dispose() {
     _idleTip?.cancel();
+    _midnight?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     c.removeListener(_onChange);
     super.dispose();
@@ -176,6 +204,8 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
           Listenable.merge([c, c.coinsListenable, AppPalette.selectedTheme]),
       builder: (context, _) {
         final isJourney = c.mode == GameMode.journey;
+        // Short phones (e.g. 360×640): trim chrome so the board keeps room.
+        final compact = MediaQuery.sizeOf(context).height < 720;
         return Stack(
           children: [
             CozyBackground(
@@ -183,6 +213,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                 backgroundColor: Colors.transparent,
                 drawerScrimColor: AppPalette.drawerScrim,
                 drawer: AppDrawer(controller: c),
+                // A tip shown behind the open drawer would be "seen" by nobody.
+                onDrawerChanged: (open) {
+                  _drawerOpen = open;
+                  _armIdleTip();
+                },
                 body: SafeArea(
                   child: Column(
                     children: [
@@ -192,10 +227,11 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                       IdentityHeader(
                         isJourney: isJourney,
                         dailyNumber: c.dailyNumber,
-                        level: c.journeyLevel,
+                        level: c.displayedJourneyLevel,
                         chapter: c.journeyChapter,
                         warmUpStep: c.warmUpStep,
                         warmUpOf: GameController.firstStepsLevels,
+                        compact: compact,
                       ),
                       const SizedBox(height: 8),
                       Expanded(
@@ -206,12 +242,14 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                           ),
                         ),
                       ),
-                      const SizedBox(height: 12),
-                      BoardInfoBar(controller: c),
+                      SizedBox(height: compact ? 6 : 12),
+                      // While "Keep going?" is open its card takes this space.
+                      if (!c.awaitingContinue) BoardInfoBar(controller: c),
                       _EndActions(
                         controller: c,
                         onNextLevel: _nextJourneyLevel,
                         onRetry: _retryJourneyLevel,
+                        compact: compact,
                       ),
                       ToastHost(controller: c),
                       Keyboard(
@@ -396,16 +434,20 @@ class _EndActions extends StatelessWidget {
   final GameController controller;
   final VoidCallback onNextLevel;
   final VoidCallback onRetry;
+  final bool compact;
   const _EndActions({
     required this.controller,
     required this.onNextLevel,
     required this.onRetry,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
-    if (c.awaitingContinue) return _KeepGoingCard(controller: c);
+    if (c.awaitingContinue) {
+      return _KeepGoingCard(controller: c, compact: compact);
+    }
     // A solved Daily: share right from the board (the stats sheet has one too).
     if (c.gameOver && c.won && c.mode == GameMode.daily) {
       return Padding(
@@ -432,17 +474,30 @@ class _EndActions extends StatelessWidget {
 
 /// "So close — keep going?" Shown on the last miss, BEFORE the result is
 /// recorded, so an extra row can still save the puzzle (and the streak).
+/// [compact] (short phones) drops the subtitle and tightens spacing so the
+/// board stays visible.
 class _KeepGoingCard extends StatelessWidget {
   final GameController controller;
-  const _KeepGoingCard({required this.controller});
+  final bool compact;
+  const _KeepGoingCard({required this.controller, this.compact = false});
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
+    const dense = VisualDensity(horizontal: -2, vertical: -2);
+    final buttonStyle = compact
+        ? const ButtonStyle(
+            visualDensity: dense,
+            padding: WidgetStatePropertyAll(
+                EdgeInsets.symmetric(horizontal: 12, vertical: 4)),
+          )
+        : null;
     return Padding(
-      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      padding: EdgeInsets.fromLTRB(16, compact ? 0 : 2, 16, compact ? 4 : 8),
       child: Container(
-        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+        padding: compact
+            ? const EdgeInsets.fromLTRB(12, 8, 12, 6)
+            : const EdgeInsets.fromLTRB(14, 12, 14, 10),
         decoration: BoxDecoration(
           color: AppPalette.chipFill,
           borderRadius: BorderRadius.circular(15),
@@ -453,33 +508,40 @@ class _KeepGoingCard extends StatelessWidget {
           children: [
             Text(
               c.canContinue ? 'So close! Keep going?' : 'Out of rows',
-              style: AppType.fredoka(fontSize: 16, color: AppPalette.ink),
+              style: AppType.fredoka(
+                  fontSize: compact ? 15 : 16, color: AppPalette.ink),
             ),
-            const SizedBox(height: 2),
-            Text(
-              c.canContinue
-                  ? 'Get one more row to finish this word.'
-                  : 'That was your extra row.',
-              style: AppType.nunito(fontSize: 13, color: AppPalette.muted),
-            ),
-            const SizedBox(height: 10),
+            if (!compact) ...[
+              const SizedBox(height: 2),
+              Text(
+                c.canContinue
+                    ? 'Get one more row to finish this word.'
+                    : 'That was your extra row.',
+                style: AppType.nunito(fontSize: 13, color: AppPalette.muted),
+              ),
+            ],
+            SizedBox(height: compact ? 6 : 10),
             Wrap(
               spacing: 8,
-              runSpacing: 6,
+              runSpacing: compact ? 2 : 6,
               alignment: WrapAlignment.center,
               children: [
                 if (c.canContinue) ...[
                   FilledButton.icon(
+                    style: buttonStyle,
                     onPressed: c.continueWithAd,
                     icon: const Icon(Icons.play_circle_outline, size: 18),
                     label: const Text('Watch ad'),
                   ),
                   OutlinedButton(
+                    style: buttonStyle,
                     onPressed: c.continueWithCoins,
-                    child: const Text('+1 row · ${CoinRules.extraGuessCost} coins'),
+                    child:
+                        const Text('+1 row · ${CoinRules.extraGuessCost} coins'),
                   ),
                 ],
                 TextButton(
+                  style: buttonStyle,
                   onPressed: c.declineContinue,
                   child: const Text('Show answer'),
                 ),

@@ -15,6 +15,9 @@ class IdentityHeader extends StatelessWidget {
   final int? warmUpStep;
   final int warmUpOf;
 
+  /// Short phones: no subtitle and tighter spacing, so the board keeps room.
+  final bool compact;
+
   const IdentityHeader({
     super.key,
     required this.isJourney,
@@ -23,6 +26,7 @@ class IdentityHeader extends StatelessWidget {
     required this.chapter,
     this.warmUpStep,
     this.warmUpOf = 3,
+    this.compact = false,
   });
 
   @override
@@ -43,7 +47,7 @@ class IdentityHeader extends StatelessWidget {
         isJourney ? AppPalette.journeyKicker : AppPalette.dailyKicker;
 
     return Padding(
-      padding: const EdgeInsets.fromLTRB(24, 12, 24, 4),
+      padding: EdgeInsets.fromLTRB(24, compact ? 4 : 12, 24, compact ? 0 : 4),
       child: Column(
         children: [
           Text(
@@ -60,14 +64,17 @@ class IdentityHeader extends StatelessWidget {
           Text(
             title,
             textAlign: TextAlign.center,
-            style: AppType.fredoka(fontSize: 27, color: AppPalette.ink),
+            style: AppType.fredoka(
+                fontSize: compact ? 23 : 27, color: AppPalette.ink),
           ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: AppType.nunito(fontSize: 14, color: AppPalette.muted),
-          ),
+          if (!compact) ...[
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: AppType.nunito(fontSize: 14, color: AppPalette.muted),
+            ),
+          ],
         ],
       ),
     );

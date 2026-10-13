@@ -191,8 +191,17 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
               ),
             ),
             const SizedBox(height: 10),
-            _boardArea(animate),
-            const Spacer(),
+            // The board takes whatever height is left and scales down to fit,
+            // so the keyboard is always fully on screen — even on 360×640.
+            Expanded(
+              child: Center(
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: _boardArea(animate),
+                ),
+              ),
+            ),
+            const SizedBox(height: 8),
             if (c.step == OnboardingStep.solve && c.showStallNudge) ...[
               StallNudge(
                 message: c.stallHint(),

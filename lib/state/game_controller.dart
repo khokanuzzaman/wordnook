@@ -90,7 +90,18 @@ class GameController extends ChangeNotifier {
 
   /// Journey chapter for the current level: 10 levels per chapter (1–10 → 1,
   /// 11–20 → 2, …). Presentation only — no persisted chapter model.
-  int get journeyChapter => ((_journeyLevel - 1) ~/ 10) + 1;
+  int get journeyChapter => ((displayedJourneyLevel - 1) ~/ 10) + 1;
+
+  /// The Journey level the board on screen belongs to. The stored level moves
+  /// on the moment a level is solved, but the header should keep naming the
+  /// solved level until the player taps "Next level".
+  int get displayedJourneyLevel =>
+      (_mode == GameMode.journey && _gameOver && _won && _journeyLevel > 1)
+          ? _journeyLevel - 1
+          : _journeyLevel;
+
+  // Whether the board on screen was started as a First Steps warm-up.
+  bool _boardIsWarmUp = false;
 
   // Within-session retry counter for the current Journey level. Each retry
   // after a loss shows a different word (but the level number is unchanged).
@@ -221,6 +232,7 @@ class GameController extends ChangeNotifier {
       _analytics.logEvent(AnalyticsEvents.dailyStarted);
     } else {
       _journeyLevel = _storage.journeyLevel;
+      _boardIsWarmUp = inFirstSteps && _journeyLevel <= firstStepsLevels;
       _journeyAttempt =
           0; // fresh entry to a level starts at its canonical word
       _answer = _journeyWord();
@@ -490,10 +502,8 @@ class GameController extends ChangeNotifier {
 
   /// The warm-up number (1–[firstStepsLevels]) while a new player is on those
   /// Journey levels, else null.
-  int? get warmUpStep => inFirstSteps &&
-          _mode == GameMode.journey &&
-          _journeyLevel <= firstStepsLevels
-      ? _journeyLevel
+  int? get warmUpStep => _mode == GameMode.journey && _boardIsWarmUp
+      ? displayedJourneyLevel
       : null;
 
   /// True once, right after the last warm-up level is solved — time to point
@@ -507,6 +517,7 @@ class GameController extends ChangeNotifier {
   /// Ends First Steps (idempotent). [reason] is an [AnalyticsFirstStepsEnd].
   Future<void> endFirstSteps(String reason) async {
     if (!inFirstSteps) return;
+    _boardIsWarmUp = false;
     await _storage.setFirstStepsActive(false);
     _analytics.logEvent(AnalyticsEvents.firstStepsCompleted,
         {AnalyticsParams.reason: reason});
