@@ -104,7 +104,7 @@ void main() {
         reason: 'reveals are stored under today');
 
     // The NEXT daily is a different scope, so it must see nothing.
-    final tomorrow = DateTime.now().toUtc().add(const Duration(days: 1));
+    final tomorrow = DateTime.now().add(const Duration(days: 1));
     expect(storage.loadHints('d:${storage.todayKey(tomorrow)}'), isEmpty,
         reason: "today's reveals must not leak into tomorrow's puzzle");
 

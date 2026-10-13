@@ -50,4 +50,13 @@ void main() {
     // A healthy daily game should not repeat words for a long time.
     expect(readWords(answersFile).length, greaterThanOrEqualTo(365));
   });
+
+  test('everyday guesses are accepted (plurals, common modern words)', () {
+    final allowed = readWords(allowedFile).toSet();
+    for (final w in ['WORDS', 'BOOKS', 'PLAYS', 'GAMES', 'TREES', 'EMOJI',
+        'EMAIL', 'PIZZA', 'ADIEU', 'STARE']) {
+      expect(allowed, contains(w), reason: '$w must be a valid guess');
+    }
+    expect(allowed.length, greaterThanOrEqualTo(12000));
+  });
 }

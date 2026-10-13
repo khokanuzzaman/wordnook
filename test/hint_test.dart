@@ -69,7 +69,7 @@ void main() {
 
     // Re-save the reveals under yesterday's scope, then restart: today's scope
     // no longer matches, so nothing should load.
-    final yesterday = DateTime.now().toUtc().subtract(const Duration(days: 1));
+    final yesterday = DateTime.now().subtract(const Duration(days: 1));
     await storage.saveHints('d:${storage.todayKey(yesterday)}', {0: 'Z'});
 
     final fresh = _controller(storage, coins);

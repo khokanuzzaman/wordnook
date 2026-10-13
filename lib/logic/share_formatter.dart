@@ -33,7 +33,12 @@ class ShareFormatter {
     required int maxGuesses,
   }) {
     final label = dayNumber != null ? '#$dayNumber' : 'Journey';
-    final score = won ? '${guesses.length}/$maxGuesses' : 'X/$maxGuesses';
+    // A win on a bought extra row reads "6+1/6" — honest, never "7/6".
+    final score = !won
+        ? 'X/$maxGuesses'
+        : guesses.length > maxGuesses
+            ? '$maxGuesses+${guesses.length - maxGuesses}/$maxGuesses'
+            : '${guesses.length}/$maxGuesses';
 
     final rows = guesses.map((g) {
       final statuses = GameEngine.evaluateGuess(g, answer);

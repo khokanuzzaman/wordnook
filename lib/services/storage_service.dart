@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart' show visibleForTesting;
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/game_result.dart';
 
@@ -8,7 +9,7 @@ import '../models/game_result.dart';
 /// Missing a day (gap > 1) resets it. Losing also resets the current streak.
 class StorageService {
   static const _kStats = 'stats_v1';
-  static const _kLastWonDate = 'last_won_date'; // yyyy-mm-dd (UTC)
+  static const _kLastWonDate = 'last_won_date'; // yyyy-mm-dd (local day)
   static const _kDailyDate = 'daily_date'; // yyyy-mm-dd of saved board
   static const _kDailyGuesses = 'daily_guesses'; // csv of guesses
   static const _kDailyDone = 'daily_done'; // bool
@@ -30,6 +31,9 @@ class StorageService {
   static const _kLastRecordedDate =
       'last_recorded_date'; // yyyy-mm-dd of the last recorded daily result
   static const _kDailyWon = 'daily_won'; // bool: outcome of the saved board
+  static const _kWelcomeCoins = 'welcome_coins_granted'; // bool, one-time
+  static const _kDailyExtraRows =
+      'daily_extra_rows'; // int: rows bought for the board at [_kDailyDate]
 
   /// Storage schema version. Bumped whenever persisted state needs a one-time
   /// fix-up on upgrade.
@@ -38,7 +42,8 @@ class StorageService {
   ///   v3 — backfill [_kLastRecordedDate] for the idempotency guard
   ///   v4 — backfill [_kDailyWon] so the outcome is stored, not inferred
   ///   v5 — backfill [_kOnboardingSeen] for existing players (new tutorial)
-  static const int _schemaVersion = 5;
+  ///   v6 — day keys switch from UTC to the device's local date
+  static const int _schemaVersion = 6;
 
   late final SharedPreferences _prefs;
 
@@ -57,6 +62,7 @@ class StorageService {
     if (from < 3) await _migrateToV3();
     if (from < 4) await _migrateToV4();
     if (from < 5) await _migrateToV5();
+    if (from < 6) await _migrateToV6();
     await _prefs.setInt(_kDailyMapVersion, _schemaVersion);
   }
 
@@ -123,6 +129,37 @@ class StorageService {
     }
   }
 
+  /// v6 — day keys move from the UTC date to the device's LOCAL date.
+  ///
+  /// West of UTC (the US), a result recorded in the evening was keyed to the
+  /// NEXT UTC day, so after this switch that key can sit one day in the
+  /// future. Left alone, "yesterday" would never match and the next win would
+  /// reset a real streak. So: clamp any future-dated streak key to today, and
+  /// drop a future-dated board (otherwise it would resurface tomorrow as "done"
+  /// and block that day's play, breaking the streak a day later).
+  /// [now] is a test seam.
+  Future<void> _migrateToV6([DateTime? now]) async {
+    final today = _dayKey(now ?? DateTime.now());
+    for (final key in [_kLastWonDate, _kLastRecordedDate]) {
+      final v = _prefs.getString(key);
+      if (v != null && v.compareTo(today) > 0) {
+        await _prefs.setString(key, today);
+      }
+    }
+    final board = _prefs.getString(_kDailyDate);
+    if (board != null && board.compareTo(today) > 0) {
+      await _prefs.remove(_kDailyDate);
+      await _prefs.remove(_kDailyGuesses);
+      await _prefs.remove(_kDailyDone);
+      await _prefs.remove(_kDailyWon);
+      await _prefs.remove(_kDailyExtraRows);
+    }
+  }
+
+  /// Test seam for the v6 clamp with an injected clock.
+  @visibleForTesting
+  Future<void> debugMigrateToV6(DateTime now) => _migrateToV6(now);
+
   /// True if the device shows any sign of prior play (used only by the v5
   /// onboarding backfill).
   bool _hasPriorGameState() {
@@ -159,7 +196,7 @@ class StorageService {
   /// Records a finished DAILY game and updates streak + distribution.
   /// [guessesUsed] is 1..maxGuesses on a win, or null on a loss.
   ///
-  /// IDEMPOTENT PER UTC DATE: a date's result is recorded exactly once, and the
+  /// IDEMPOTENT PER (LOCAL) DATE: a date's result is recorded exactly once, and the
   /// first result for a date is final. Any later call for the same date is a
   /// complete no-op — stats, streak, [_kLastWonDate] and [_kBrokenStreak] are
   /// all left alone.
@@ -182,14 +219,25 @@ class StorageService {
     final prevStreak = s.currentStreak;
 
     final dist = List<int>.from(s.guessDistribution);
-    if (won && guessesUsed != null && guessesUsed < dist.length) {
-      dist[guessesUsed] += 1;
+    if (won && guessesUsed != null && guessesUsed > 0 && dist.isNotEmpty) {
+      // A win on a bought extra row (7th guess) counts in the last bucket
+      // ("6+"), so the bars always add up to games won.
+      final i = guessesUsed < dist.length ? guessesUsed : dist.length - 1;
+      dist[i] += 1;
     }
 
     int newStreak;
     int brokenStreak = 0; // > 0 => a non-trivial streak just ended; restorable.
-    if (won) {
-      final last = _prefs.getString(_kLastWonDate);
+    final lastWon = _prefs.getString(_kLastWonDate);
+    if (lastWon == today) {
+      // Today's streak day is ALREADY earned before any daily was recorded —
+      // only the first-run tutorial does this ([beginStreakFromOnboarding]).
+      // Playing today's real daily must neither re-count nor "break" it:
+      // treating it as a gap used to offer a brand-new player a
+      // "Restore streak (watch ad)" on day one.
+      newStreak = prevStreak > 0 ? prevStreak : (won ? 1 : 0);
+    } else if (won) {
+      final last = lastWon;
       if (_isYesterday(last, today)) {
         newStreak = prevStreak + 1; // consecutive day: keep building.
       } else {
@@ -236,7 +284,11 @@ class StorageService {
       currentStreak: pending,
       bestStreak: pending > s.bestStreak ? pending : s.bestStreak,
     );
-    await _prefs.setString(_kLastWonDate, today);
+    // Stamp the day whose result broke the streak — not the clock's day. If
+    // the sheet sat open past midnight, stamping "today" would pre-credit the
+    // new day, so its real daily could no longer break the streak.
+    await _prefs.setString(
+        _kLastWonDate, _prefs.getString(_kLastRecordedDate) ?? today);
     await _prefs.setInt(_kBrokenStreak, 0);
     await _saveStats(restored);
     return restored;
@@ -287,9 +339,60 @@ class StorageService {
     DateTime? now,
   }) async {
     final today = _dayKey(now ?? DateTime.now());
+    if (_prefs.getString(_kDailyDate) != today) {
+      await _prefs.remove(_kDailyExtraRows); // a new day starts with none
+    }
     await _prefs.setString(_kDailyDate, today);
     await _prefs.setString(_kDailyGuesses, guesses.join(','));
     await _prefs.setBool(_kDailyDone, done);
+  }
+
+  /// Rows bought ("Keep going?") for TODAY's board; 0 for any other day.
+  int loadDailyExtraRows([DateTime? now]) {
+    if (_prefs.getString(_kDailyDate) != _dayKey(now ?? DateTime.now())) {
+      return 0;
+    }
+    return _prefs.getInt(_kDailyExtraRows) ?? 0;
+  }
+
+  /// Persists the rows bought for today's board, so a restart between buying
+  /// and guessing can't make the player pay twice.
+  Future<void> saveDailyExtraRows(int rows, {DateTime? now}) async {
+    await _prefs.setString(_kDailyDate, _dayKey(now ?? DateTime.now()));
+    await _prefs.setInt(_kDailyExtraRows, rows);
+  }
+
+  /// A board from an EARLIER day that was left full but unfinished — the app
+  /// closed while "Keep going?" was open and the player never came back that
+  /// day. Returns that day (as a date) so its loss can still be recorded, or
+  /// null when there is nothing to settle. [fullAt] is the normal row count.
+  DateTime? abandonedBoardDate(int fullAt, [DateTime? now]) {
+    final date = _prefs.getString(_kDailyDate);
+    // Strictly earlier days only (a clock moved backwards must not record a
+    // "future" loss).
+    if (date == null || date.compareTo(_dayKey(now ?? DateTime.now())) >= 0) {
+      return null;
+    }
+    if (_prefs.getBool(_kDailyDone) ?? false) return null;
+    final rows = (_prefs.getString(_kDailyGuesses) ?? '')
+        .split(',')
+        .where((g) => g.isNotEmpty)
+        .length;
+    if (rows < fullAt) return null;
+    if ((_prefs.getString(_kLastRecordedDate) ?? '').compareTo(date) >= 0) {
+      return null; // that day (or a later one) is already recorded
+    }
+    final d = _parseDayKey(date);
+    return d == null ? null : DateTime.utc(d.year, d.month, d.day, 12);
+  }
+
+  /// Marks the board at [day] finished as a loss (after it was recorded).
+  Future<void> closeAbandonedBoard(DateTime day) async {
+    // Only if that old board is still the saved one — never overwrite a board
+    // saved for today in the meantime.
+    if (_prefs.getString(_kDailyDate) != _dayKey(day)) return;
+    await _prefs.setBool(_kDailyDone, true);
+    await _prefs.setBool(_kDailyWon, false);
   }
 
   // --- Revealed hints ------------------------------------------------------
@@ -328,7 +431,7 @@ class StorageService {
     await _prefs.remove(_kHintReveals);
   }
 
-  /// UTC day key (yyyy-mm-dd), used to scope per-day state such as hints.
+  /// Local day key (yyyy-mm-dd), used to scope per-day state such as hints.
   String todayKey([DateTime? now]) => _dayKey(now ?? DateTime.now());
 
   // --- Daily reminder settings --------------------------------------------
@@ -382,6 +485,15 @@ class StorageService {
   // --- Coins ---------------------------------------------------------------
 
   int get coins => _prefs.getInt(_kCoins) ?? 0;
+
+  /// Adds the one-time welcome balance. Returns false (and adds nothing) if it
+  /// was already granted on this install.
+  Future<bool> grantWelcomeCoins(int amount) async {
+    if (_prefs.getBool(_kWelcomeCoins) ?? false) return false;
+    await _prefs.setBool(_kWelcomeCoins, true);
+    await setCoins(coins + amount);
+    return true;
+  }
   Future<void> setCoins(int value) =>
       _prefs.setInt(_kCoins, value < 0 ? 0 : value);
 
@@ -410,18 +522,34 @@ class StorageService {
 
   // --- helpers -------------------------------------------------------------
 
-  String _dayKey(DateTime dt) {
-    final d = dt.toUtc();
+  /// Calendar-day key (yyyy-mm-dd) for [dt], read from [dt]'s OWN calendar
+  /// fields with no time-zone conversion. In the app every caller passes
+  /// `DateTime.now()` (device-local), so the daily rolls over at the player's
+  /// local midnight. Tests may pass a UTC instant to pin an exact date.
+  String _dayKey(DateTime d) {
     return '${d.year.toString().padLeft(4, '0')}-'
         '${d.month.toString().padLeft(2, '0')}-'
         '${d.day.toString().padLeft(2, '0')}';
   }
 
   bool _isYesterday(String? prev, String today) {
-    if (prev == null) return false;
-    final p = DateTime.tryParse(prev);
-    final t = DateTime.tryParse(today);
+    final p = _parseDayKey(prev);
+    final t = _parseDayKey(today);
     if (p == null || t == null) return false;
     return t.difference(p).inDays == 1;
+  }
+
+  /// Parses a yyyy-mm-dd key as a UTC date. UTC (not local) so a day-length
+  /// change at a DST switch (23h / 25h) can never make "yesterday" look like
+  /// 0 or 2 days ago and silently break a streak.
+  static DateTime? _parseDayKey(String? key) {
+    if (key == null) return null;
+    final parts = key.split('-');
+    if (parts.length != 3) return null;
+    final y = int.tryParse(parts[0]);
+    final m = int.tryParse(parts[1]);
+    final d = int.tryParse(parts[2]);
+    if (y == null || m == null || d == null) return null;
+    return DateTime.utc(y, m, d);
   }
 }

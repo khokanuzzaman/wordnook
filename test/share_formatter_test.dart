@@ -74,4 +74,17 @@ void main() {
       expect(text, startsWith('X Journey 1/6'));
     });
   });
+
+  test('a win on a bought extra row reads 6+1/6', () {
+    final text = ShareFormatter.build(
+      appName: 'Wordnook',
+      dayNumber: 650,
+      guesses: const ['SLATE', 'SLATE', 'SLATE', 'SLATE', 'SLATE', 'SLATE',
+          'CRANE'],
+      answer: 'CRANE',
+      won: true,
+      maxGuesses: 6,
+    );
+    expect(text.split('\n').first, 'Wordnook #650 6+1/6');
+  });
 }

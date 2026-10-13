@@ -1,7 +1,10 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'branding.dart';
 import 'screens/game_screen.dart';
 import 'screens/onboarding/onboarding_screen.dart';
+import 'services/ads_service.dart';
 import 'state/game_controller.dart';
 import 'theme/app_theme.dart';
 
@@ -38,7 +41,12 @@ class _RootState extends State<_Root> {
     if (_showOnboarding) {
       return OnboardingScreen(
         storage: widget.controller.storage,
-        onFinish: () => setState(() => _showOnboarding = false),
+        onFinish: () {
+          // Deferred from main() on a first run: consent / tracking prompts
+          // appear only after the tutorial.
+          unawaited(AdsService.instance.init());
+          setState(() => _showOnboarding = false);
+        },
       );
     }
     return GameScreen(controller: widget.controller);

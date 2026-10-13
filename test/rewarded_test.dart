@@ -71,31 +71,29 @@ void main() {
     expect(coins.coins, 0);
   });
 
-  test('extra guess is refused when broke and granted when paid', () async {
-    final (storage, coins) = await _fresh();
-    final c = await _controller(coins, _FakeAds(true), storage: storage);
-    c.startGame(GameMode.daily);
+  test('"Keep going?" via ad grants a row ONLY on an earned view', () async {
+    for (final earned in [false, true]) {
+      final (storage, coins) = await _fresh();
+      final ads = _FakeAds(earned);
+      final c = await _controller(coins, ads, storage: storage);
+      c.startGame(GameMode.daily);
 
-    // Lose the game so an extra guess is offered.
-    final wrong =
-        ['CRANE', 'SLATE', 'BRINE'].firstWhere((w) => w != c.answer);
-    for (var i = 0; i < GameController.maxGuesses; i++) {
-      for (final ch in wrong.split('')) {
-        c.onKey(ch);
+      final wrong =
+          ['CRANE', 'SLATE', 'BRINE'].firstWhere((w) => w != c.answer);
+      for (var i = 0; i < GameController.maxGuesses; i++) {
+        for (final ch in wrong.split('')) {
+          c.onKey(ch);
+        }
+        c.onKey('ENTER');
+        await Future<void>.delayed(Duration.zero);
       }
-      c.onKey('ENTER');
-      await Future<void>.delayed(Duration.zero);
+      expect(c.awaitingContinue, isTrue);
+
+      await c.continueWithAd();
+      expect(ads.shown, 1);
+      expect(c.acceptingInput, earned,
+          reason: earned ? 'earned view => row granted' : 'no view => no row');
+      expect(c.awaitingContinue, !earned);
     }
-    expect(c.gameOver, isTrue);
-    expect(c.won, isFalse);
-
-    // Broke → still game over.
-    await c.useExtraGuess();
-    expect(c.gameOver, isTrue);
-
-    // Paid → game re-opens for another guess.
-    await coins.award(CoinRules.extraGuessCost);
-    await c.useExtraGuess();
-    expect(c.gameOver, isFalse);
   });
 }

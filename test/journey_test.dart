@@ -52,12 +52,54 @@ void main() {
   });
 
   group('ad cadence', () {
-    test('interstitial is due every 3rd level', () {
+    final t0 = DateTime(2026, 10, 13, 12);
+
+    test('interstitial is due every 3rd level (well spaced in time)', () {
       final ads = AdsService.instance..debugResetCadence();
       final results = [
-        for (var i = 0; i < 6; i++) ads.shouldShowJourneyInterstitial()
+        for (var i = 0; i < 6; i++)
+          ads.shouldShowJourneyInterstitial(
+              now: t0.add(Duration(minutes: 5 * i)))
       ];
       expect(results, [false, false, true, false, false, true]);
+    });
+
+    test('a due interstitial waits out the minimum gap, then shows', () {
+      final ads = AdsService.instance..debugResetCadence();
+      bool at(int seconds) => ads.shouldShowJourneyInterstitial(
+          now: t0.add(Duration(seconds: seconds)));
+      expect([at(0), at(10), at(20)], [false, false, true]);
+      // Three more fast levels: due again, but too soon after the last ad.
+      expect([at(30), at(40), at(50)], [false, false, false]);
+      // Once the gap has passed, the overdue ad shows on the next level.
+      expect(at(20 + AdsService.minInterstitialGap.inSeconds), isTrue);
+    });
+  });
+
+  group('interstitial grace period', () {
+    test('consulted on "Next level" only after the grace levels', () async {
+      SharedPreferences.setMockInitialValues({
+        'flutter.journey_level': GameController.journeyAdGraceLevels + 1,
+      });
+      final storage = StorageService();
+      await storage.init();
+      final ads = FakeAds();
+      final c = GameController(
+          words: WordRepository()..debugLoad(['CRANE', 'SLATE', 'BRINE']),
+          storage: storage,
+          coins: CoinService(storage),
+          ads: ads);
+      c.startGame(GameMode.journey);
+      for (final ch in c.answer.split('')) {
+        c.onKey(ch);
+      }
+      c.onKey('ENTER');
+      await Future<void>.delayed(Duration.zero);
+      expect(c.won, isTrue);
+      expect(ads.interstitialCalls, 0);
+
+      c.nextJourneyLevel();
+      expect(ads.interstitialCalls, 1);
     });
   });
 
@@ -98,7 +140,13 @@ void main() {
       expect(c.won, isTrue);
       expect(c.journeyLevel, 2, reason: 'a solved level advances the counter');
       expect(storage.journeyLevel, 2, reason: 'progress is persisted');
-      expect(ads.interstitialCalls, 1, reason: 'cadence is consulted on win');
+      expect(ads.interstitialCalls, 0,
+          reason: 'never at the moment of the win');
+      c.nextJourneyLevel();
+      expect(ads.interstitialCalls, 0,
+          reason: 'a new player is inside the ad grace period');
+      expect(c.journeyLevel, 2);
+      expect(c.gameOver, isFalse);
     });
 
     test('a loss does not advance the level', () async {
@@ -121,6 +169,8 @@ void main() {
         c.onKey('ENTER');
         await Future<void>.delayed(Duration.zero);
       }
+      expect(c.awaitingContinue, isTrue);
+      await c.declineContinue();
 
       expect(c.gameOver, isTrue);
       expect(c.won, isFalse);

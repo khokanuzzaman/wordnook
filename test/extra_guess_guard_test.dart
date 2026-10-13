@@ -18,7 +18,7 @@ class _FakeAds implements GameAds {
 const _words = ['CRANE', 'SLATE', 'BRINE'];
 
 String _todayKey() {
-  final d = DateTime.now().toUtc();
+  final d = DateTime.now();
   return '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
@@ -27,7 +27,7 @@ String _todayKey() {
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
 
-  test('an extra guess on an empty finished board deducts 0 coins', () async {
+  test('a finished board never opens "Keep going?" or charges', () async {
     // A finished daily whose board carries no guesses (what a migrated
     // pre-remap install looks like).
     SharedPreferences.setMockInitialValues({
@@ -49,17 +49,18 @@ void main() {
     c.startGame(GameMode.daily);
 
     expect(c.gameOver, isTrue);
-    expect(c.won, isFalse);
-    expect(c.guesses, isEmpty);
+    expect(c.awaitingContinue, isFalse);
 
     final before = coins.coins;
-    await c.useExtraGuess();
+    await c.continueWithCoins();
+    await c.continueWithAd();
 
-    expect(coins.coins, before, reason: 'nothing to extend — charge nothing');
+    expect(coins.coins, before, reason: 'no offer open — charge nothing');
     expect(c.gameOver, isTrue, reason: 'the board must stay closed');
+    expect(c.acceptingInput, isFalse);
   });
 
-  test('an extra guess still works on a board that has guesses', () async {
+  test('broke players are nudged and keep the offer open', () async {
     SharedPreferences.setMockInitialValues({});
     final storage = StorageService();
     await storage.init();
@@ -72,7 +73,6 @@ void main() {
     );
     c.startGame(GameMode.daily);
 
-    // Lose properly, so there ARE guesses to extend.
     final wrong = _words.firstWhere((w) => w != c.answer);
     for (var i = 0; i < GameController.maxGuesses; i++) {
       for (final ch in wrong.split('')) {
@@ -81,13 +81,15 @@ void main() {
       c.onKey('ENTER');
       await Future<void>.delayed(Duration.zero);
     }
-    expect(c.gameOver, isTrue);
-    expect(c.guesses, isNotEmpty);
+    expect(c.awaitingContinue, isTrue);
+
+    await c.continueWithCoins(); // 0 coins
+    expect(c.awaitingContinue, isTrue, reason: 'still their choice');
+    expect(coins.coins, 0);
 
     await coins.award(CoinRules.extraGuessCost);
-    await c.useExtraGuess();
-
-    expect(c.gameOver, isFalse, reason: 'the guard must not block the real case');
+    await c.continueWithCoins();
+    expect(c.acceptingInput, isTrue);
     expect(coins.coins, 0);
   });
 }

@@ -17,7 +17,7 @@ class _FakeAds implements GameAds {
 const _words = ['CRANE', 'SLATE', 'BRINE'];
 
 String _todayKey() {
-  final d = DateTime.now().toUtc();
+  final d = DateTime.now();
   return '${d.year.toString().padLeft(4, '0')}-'
       '${d.month.toString().padLeft(2, '0')}-'
       '${d.day.toString().padLeft(2, '0')}';
@@ -98,6 +98,8 @@ void main() {
         c.onKey('ENTER');
         await Future<void>.delayed(Duration.zero);
       }
+      expect(c.awaitingContinue, isTrue);
+      await c.declineContinue();
       expect(c.gameOver, isTrue);
       expect(c.won, isFalse);
 

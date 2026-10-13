@@ -45,7 +45,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    // Roll the daily over live: if the app was open across UTC midnight, reload
+    // Roll the daily over live: if the app was open across midnight, reload
     // the new day's puzzle (and its number) on resume instead of showing a
     // stale board.
     if (state == AppLifecycleState.resumed && c.dailyNeedsRefresh) {
@@ -106,7 +106,7 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
 
   void _nextJourneyLevel() {
     _endShown = false;
-    c.startGame(GameMode.journey);
+    c.nextJourneyLevel();
   }
 
   void _retryJourneyLevel() {
@@ -156,7 +156,6 @@ class _GameScreenState extends State<GameScreen> with WidgetsBindingObserver {
                         controller: c,
                         onNextLevel: _nextJourneyLevel,
                         onRetry: _retryJourneyLevel,
-                        onExtraGuess: c.useExtraGuess,
                       ),
                       ToastHost(controller: c),
                       Keyboard(
@@ -225,7 +224,9 @@ class _TopBar extends StatelessWidget {
               icon: Icons.lightbulb_outline,
               tooltip: c.canUseHint
                   ? 'Reveal a letter (costs coins)'
-                  : 'Nothing left to reveal',
+                  : c.awaitingContinue
+                      ? 'Keep going or show the answer first'
+                      : 'Nothing left to reveal',
               onTap: c.canUseHint ? c.useHint : null,
             ),
             const SizedBox(width: 8),
@@ -333,50 +334,93 @@ class _CoinPill extends StatelessWidget {
   }
 }
 
-/// Bottom-of-board actions for end states (Journey next/retry, extra guess).
+/// Bottom-of-board actions: the "Keep going?" offer on the last miss, and the
+/// Journey next / retry buttons once a level is over.
 class _EndActions extends StatelessWidget {
   final GameController controller;
   final VoidCallback onNextLevel;
   final VoidCallback onRetry;
-  final VoidCallback onExtraGuess;
   const _EndActions({
     required this.controller,
     required this.onNextLevel,
     required this.onRetry,
-    required this.onExtraGuess,
   });
 
   @override
   Widget build(BuildContext context) {
     final c = controller;
-    if (!c.gameOver) return const SizedBox(height: 8);
-
-    final buttons = <Widget>[];
-    // Offer a rewarded extra guess on a loss (both modes) — but only when
-    // there are guesses to extend.
-    if (!c.won && c.guesses.isNotEmpty) {
-      buttons.add(
-        OutlinedButton.icon(
-          onPressed: onExtraGuess,
-          icon: const Icon(Icons.add),
-          label: const Text('Extra guess (${CoinRules.extraGuessCost} coins)'),
-        ),
-      );
+    if (c.awaitingContinue) return _KeepGoingCard(controller: c);
+    if (!c.gameOver || c.mode != GameMode.journey) {
+      return const SizedBox(height: 8);
     }
-    if (c.mode == GameMode.journey) {
-      buttons.add(
-        FilledButton(
-          onPressed: c.won ? onNextLevel : onRetry,
-          child: Text(c.won ? 'Next level' : 'Try again'),
-        ),
-      );
-    }
-    if (buttons.isEmpty) return const SizedBox(height: 8);
-
     return Padding(
       padding: const EdgeInsets.only(bottom: 8, top: 4),
-      child:
-          Wrap(spacing: 12, alignment: WrapAlignment.center, children: buttons),
+      child: FilledButton(
+        onPressed: c.won ? onNextLevel : onRetry,
+        child: Text(c.won ? 'Next level' : 'Try again'),
+      ),
+    );
+  }
+}
+
+/// "So close — keep going?" Shown on the last miss, BEFORE the result is
+/// recorded, so an extra row can still save the puzzle (and the streak).
+class _KeepGoingCard extends StatelessWidget {
+  final GameController controller;
+  const _KeepGoingCard({required this.controller});
+
+  @override
+  Widget build(BuildContext context) {
+    final c = controller;
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 2, 16, 8),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(14, 12, 14, 10),
+        decoration: BoxDecoration(
+          color: AppPalette.chipFill,
+          borderRadius: BorderRadius.circular(15),
+          border: Border.all(color: AppPalette.coinPillBorder),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              c.canContinue ? 'So close! Keep going?' : 'Out of rows',
+              style: AppType.fredoka(fontSize: 16, color: AppPalette.ink),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              c.canContinue
+                  ? 'Get one more row to finish this word.'
+                  : 'That was your extra row.',
+              style: AppType.nunito(fontSize: 13, color: AppPalette.muted),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 8,
+              runSpacing: 6,
+              alignment: WrapAlignment.center,
+              children: [
+                if (c.canContinue) ...[
+                  FilledButton.icon(
+                    onPressed: c.continueWithAd,
+                    icon: const Icon(Icons.play_circle_outline, size: 18),
+                    label: const Text('Watch ad'),
+                  ),
+                  OutlinedButton(
+                    onPressed: c.continueWithCoins,
+                    child: const Text('+1 row · ${CoinRules.extraGuessCost} coins'),
+                  ),
+                ],
+                TextButton(
+                  onPressed: c.declineContinue,
+                  child: const Text('Show answer'),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

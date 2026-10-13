@@ -1,3 +1,6 @@
+import 'dart:async';
+import 'dart:math' as math;
+
 import 'package:flutter/foundation.dart';
 
 import '../branding.dart';
@@ -39,7 +42,7 @@ class GameController extends ChangeNotifier {
   Analytics get _analytics => _analyticsOverride ?? AnalyticsService.instance;
 
   // Guards the once-per-entry completion analytics (daily_completed /
-  // streak_broken), so the rewarded extra-guess re-entry can't double-fire.
+  // streak_broken), so a re-entry can never double-fire them.
   bool _dailyResultLogged = false;
 
   /// Exposed for the settings screen (reminder prefs, onboarding flag).
@@ -53,6 +56,12 @@ class GameController extends ChangeNotifier {
   CoinService get coinService => _coins;
 
   static const int maxGuesses = 6;
+
+  /// How many extra rows a player may buy per puzzle via "Keep going?".
+  static const int maxExtraRows = 1;
+
+  /// Journey levels a new player clears before any interstitial can show.
+  static const int journeyAdGraceLevels = 8;
   int get wordLength => WordRepository.wordLength;
 
   GameMode _mode = GameMode.daily;
@@ -65,11 +74,11 @@ class GameController extends ChangeNotifier {
   ///
   /// Snapshotted in [startGame] from the SAME instant the daily word is chosen,
   /// so the header number always matches the puzzle on screen — even if the app
-  /// is left open across UTC midnight. It advances the next time the daily is
+  /// is left open across midnight. It advances the next time the daily is
   /// (re)started, in lockstep with the word.
   int get dailyNumber => _dailyNumber;
 
-  /// True when we're on Daily and the UTC date has advanced past the loaded
+  /// True when we're on Daily and the local date has advanced past the loaded
   /// puzzle — i.e. the app was open across midnight and the daily is now stale.
   /// The UI uses this on resume to roll the puzzle over live.
   bool get dailyNeedsRefresh =>
@@ -99,6 +108,12 @@ class GameController extends ChangeNotifier {
 
   String _answer = '';
   int _dailyNumber = 0; // snapshot of the loaded daily's puzzle number
+
+  // "Keep going?" — offered on the last miss BEFORE the result is recorded, so
+  // an extra row can still save the day (and the streak).
+  int _extraRows = 0;
+  bool _awaitingContinue = false;
+  bool _settlingAbandoned = false;
   final List<String> _guesses = [];
   String _current = '';
   bool _gameOver = false;
@@ -115,6 +130,19 @@ class GameController extends ChangeNotifier {
   String? get message => _message;
   String get answer => _answer;
   GameStats get stats => _stats;
+
+  /// Rows available on this puzzle: the normal six plus any bought extras.
+  int get maxRows => maxGuesses + _extraRows;
+
+  /// True while the "Keep going?" offer is open: every normal row is used, the
+  /// word is unsolved, and nothing has been recorded yet.
+  bool get awaitingContinue => _awaitingContinue;
+
+  /// Whether another extra row can still be bought on this puzzle.
+  bool get canContinue => _extraRows < maxExtraRows;
+
+  /// Whether the board takes typing right now.
+  bool get acceptingInput => !_gameOver && !_awaitingContinue;
 
   final Map<String, LetterStatus> _keyStatus = {};
   Map<String, LetterStatus> get keyStatus => Map.unmodifiable(_keyStatus);
@@ -146,6 +174,8 @@ class GameController extends ChangeNotifier {
     _message = null;
     _keyStatus.clear();
     _dailyResultLogged = false;
+    _extraRows = 0;
+    _awaitingContinue = false;
 
     if (mode == GameMode.daily) {
       // Choose the word and its published number from ONE instant, so the
@@ -153,17 +183,32 @@ class GameController extends ChangeNotifier {
       final now = DateTime.now();
       _answer = _words.dailyWord(now);
       _dailyNumber = _words.dailyNumber(now);
+      // Settle a previous day's board that was left at "Keep going?".
+      final abandoned = _storage.abandonedBoardDate(maxGuesses, now);
+      if (abandoned != null && !_settlingAbandoned) {
+        unawaited(_recordAbandoned(abandoned));
+      }
       // Restore today's progress if it exists.
       final saved = _storage.loadDailyGuesses();
       for (final g in saved) {
         _applyToKeyboard(g);
       }
       _guesses.addAll(saved);
+      // Rows bought earlier today survive a restart (stored, or implied by a
+      // 7th guess on the board).
+      _extraRows = math
+          .max(_storage.loadDailyExtraRows(now), saved.length - maxGuesses)
+          .clamp(0, maxExtraRows);
       if (_storage.isDailyDone()) {
         _gameOver = true;
         // Read the stored outcome rather than inferring it from the guesses —
         // inference reports a loss whenever the board isn't available.
         _won = _storage.isDailyWon();
+      } else if (saved.length >= maxRows &&
+          !saved.contains(_answer)) {
+        // The app closed while "Keep going?" was open: reopen the offer
+        // rather than leaving a full, unrecorded board.
+        _awaitingContinue = true;
       }
       _analytics.logEvent(AnalyticsEvents.dailyStarted);
     } else {
@@ -184,6 +229,19 @@ class GameController extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Records the loss for an earlier day's board that was abandoned at the
+  /// "Keep going?" offer, so it still reaches games played / win %.
+  Future<void> _recordAbandoned(DateTime day) async {
+    _settlingAbandoned = true; // a quick second startGame must not re-record
+    try {
+      _stats = await _storage.recordDailyResult(won: false, now: day);
+      await _storage.closeAbandonedBoard(day);
+    } finally {
+      _settlingAbandoned = false;
+    }
+    notifyListeners();
+  }
+
   /// Retries the current Journey level after a loss with a DIFFERENT word, so
   /// players don't just re-enter the word they already learned. The level
   /// number (and its "% solved" stat) stays the same.
@@ -196,6 +254,8 @@ class GameController extends ChangeNotifier {
     _won = false;
     _message = null;
     _keyStatus.clear();
+    _extraRows = 0;
+    _awaitingContinue = false;
     // A retry is a different word, so previously revealed positions no longer
     // apply. (The stored copy is scoped to the old attempt and simply won't
     // load again.)
@@ -207,7 +267,7 @@ class GameController extends ChangeNotifier {
   // --- Input ---------------------------------------------------------------
 
   void onKey(String key) {
-    if (_gameOver) return;
+    if (!acceptingInput) return;
     if (key == 'ENTER') {
       _submit();
     } else if (key == 'DEL') {
@@ -249,11 +309,32 @@ class GameController extends ChangeNotifier {
       _won = true;
       _gameOver = true;
       _message = _winMessage(_guesses.length);
-    } else if (_guesses.length >= maxGuesses) {
+    } else if (_guesses.length >= maxRows) {
+      if (canContinue) {
+        // Hold the result: offer "Keep going?" first. Nothing is recorded
+        // until the player buys a row or gives up.
+        _awaitingContinue = true;
+        if (_mode == GameMode.daily) {
+          await _storage.saveDailyProgress(guesses: _guesses, done: false);
+        }
+        _analytics.logEvent(AnalyticsEvents.continueOffered,
+            {AnalyticsParams.mode: _mode.name});
+        notifyListeners();
+        return;
+      }
       _gameOver = true;
-      _message = 'Out of guesses — the word was $_answer';
+      _message = _lossMessage;
     }
 
+    await _settle();
+    notifyListeners();
+  }
+
+  String get _lossMessage => 'Out of guesses — the word was $_answer';
+
+  /// Persists and rewards the state after a guess (and, at game end, records
+  /// the result). Shared by a normal guess and by declining "Keep going?".
+  Future<void> _settle() async {
     if (_mode == GameMode.daily) {
       await _storage.saveDailyProgress(guesses: _guesses, done: _gameOver);
       if (_gameOver) {
@@ -265,8 +346,8 @@ class GameController extends ChangeNotifier {
           won: _won,
           guessesUsed: _won ? _guesses.length : null,
         );
-        // Fire completion analytics at most once per entry (a rewarded extra
-        // guess can re-run this block).
+        // Fire completion analytics at most once per entry (defensive: the
+        // recording itself is idempotent per date).
         if (!_dailyResultLogged) {
           _dailyResultLogged = true;
           _analytics.logEvent(AnalyticsEvents.dailyCompleted, {
@@ -288,7 +369,12 @@ class GameController extends ChangeNotifier {
           _analytics.syncStreak(_stats.currentStreak);
           _analytics.syncPlayed(_stats.gamesPlayed);
         }
-        if (_won) {
+        if (_won && alreadyRecorded) {
+          // Defensive: today's result was already final, so neither the
+          // streak nor the coins move.
+          _message = '${_winMessage(_guesses.length)}  '
+              "Today's result was already recorded.";
+        } else if (_won) {
           final reward = CoinRules.dailyWinReward(
             guessesUsed: _guesses.length,
             maxGuesses: maxGuesses,
@@ -299,12 +385,7 @@ class GameController extends ChangeNotifier {
             AnalyticsParams.amount: reward,
             AnalyticsParams.source: AnalyticsSources.dailyWin,
           });
-          if (alreadyRecorded) {
-            // Won on a reopened board (rewarded extra guess). The day's result
-            // is already final, so don't imply the streak moved.
-            _message = '${_winMessage(_guesses.length)}  '
-                "Today's result was already recorded.";
-          } else if (_stats.currentStreak >= 2) {
+          if (_stats.currentStreak >= 2) {
             // Celebrate the streak once it's worth bragging about.
             final milestone = CoinRules.isStreakMilestone(_stats.currentStreak);
             _message = '${_winMessage(_guesses.length)}  '
@@ -332,9 +413,81 @@ class GameController extends ChangeNotifier {
         AnalyticsParams.source: AnalyticsSources.journeyLevel,
       });
       _analytics.syncJourney(_journeyLevel);
+      // The interstitial is NOT shown here — that would cover the win moment.
+      // It is consulted when the player taps "Next level" ([nextJourneyLevel]).
+    }
+  }
+
+  /// Moves on from a solved Journey level. This tap — not the win itself — is
+  /// where a (frequency-capped) interstitial may show, and never during a new
+  /// player's first [journeyAdGraceLevels] levels.
+  void nextJourneyLevel() {
+    if (_mode != GameMode.journey) return;
+    final completedLevel = _journeyLevel - 1; // advanced when it was solved
+    if (_won && completedLevel >= journeyAdGraceLevels) {
       _ads.maybeShowJourneyInterstitial();
     }
+    startGame(GameMode.journey);
+  }
 
+  // --- Keep going? ---------------------------------------------------------
+
+  /// Buys one extra row with coins. Nudges toward the ad option when broke.
+  Future<void> continueWithCoins() async {
+    if (!_awaitingContinue || !canContinue) return;
+    // The puzzle may change while we await (e.g. a midnight rollover on
+    // resume); if it did, the spend is refunded and no row is granted.
+    final puzzle = _answer;
+    if (!await _coins.trySpend(CoinRules.extraGuessCost)) {
+      _flash('Need ${CoinRules.extraGuessCost} coins — or watch a short ad');
+      return;
+    }
+    if (!_awaitingContinue || _answer != puzzle) {
+      await _coins.award(CoinRules.extraGuessCost); // refund
+      return;
+    }
+    _analytics.logEvent(AnalyticsEvents.coinsSpent, {
+      AnalyticsParams.amount: CoinRules.extraGuessCost,
+      AnalyticsParams.sink: AnalyticsSinks.extraGuess,
+    });
+    _grantExtraRow(AnalyticsContinueVia.coins);
+  }
+
+  /// Earns one extra row by watching a rewarded ad (only on a real view).
+  Future<void> continueWithAd() async {
+    if (!_awaitingContinue || !canContinue) return;
+    final puzzle = _answer;
+    if (!await _ads.showRewarded()) {
+      _flash('No ad available — try again in a moment');
+      return;
+    }
+    // The ad may have been open across a midnight rollover.
+    if (!_awaitingContinue || _answer != puzzle) return;
+    _grantExtraRow(AnalyticsContinueVia.rewardedAd);
+  }
+
+  void _grantExtraRow(String via) {
+    _extraRows += 1;
+    _awaitingContinue = false;
+    if (_mode == GameMode.daily) {
+      unawaited(_storage.saveDailyExtraRows(_extraRows));
+    }
+    _analytics.logEvent(AnalyticsEvents.continueAccepted, {
+      AnalyticsParams.mode: _mode.name,
+      AnalyticsParams.via: via,
+    });
+    _flash('Extra guess granted');
+  }
+
+  /// Gives up at the "Keep going?" offer: the loss is final and recorded.
+  Future<void> declineContinue() async {
+    if (!_awaitingContinue) return;
+    _awaitingContinue = false;
+    _gameOver = true;
+    _message = _lossMessage;
+    _analytics.logEvent(AnalyticsEvents.continueDeclined,
+        {AnalyticsParams.mode: _mode.name});
+    await _settle();
     notifyListeners();
   }
 
@@ -359,12 +512,12 @@ class GameController extends ChangeNotifier {
   ///
   /// Intentionally NOT gated on affordability: a player who can't pay should
   /// still be able to tap and get nudged toward watch-to-earn.
-  bool get canUseHint => !_gameOver && _nextHintPosition != null;
+  bool get canUseHint => acceptingInput && _nextHintPosition != null;
 
   /// Reveals one not-yet-known position. Costs coins; if the player can't
   /// afford it, they're nudged to the watch-to-earn action.
   Future<void> useHint() async {
-    if (_gameOver) return;
+    if (!acceptingInput) return;
     // Resolve the target BEFORE spending — otherwise a hint with nothing left
     // to reveal would charge for no information.
     final position = _nextHintPosition;
@@ -392,27 +545,6 @@ class GameController extends ChangeNotifier {
     _flash('Hint: position ${i + 1} is "${_answer[i]}"');
   }
 
-  /// Grants one extra guess beyond the normal max. Costs coins.
-  Future<void> useExtraGuess() async {
-    if (!_gameOver || _won) return;
-    // An "extra" guess on a board with no guesses is meaningless — there is
-    // nothing to extend. Reachable when a finished board has no guesses to
-    // restore, and never worth charging for.
-    if (_guesses.isEmpty) return;
-    if (!await _coins.trySpend(CoinRules.extraGuessCost)) {
-      _flash(
-          'Need ${CoinRules.extraGuessCost} coins — tap the coin to watch & earn');
-      return;
-    }
-    _analytics.logEvent(AnalyticsEvents.coinsSpent, {
-      AnalyticsParams.amount: CoinRules.extraGuessCost,
-      AnalyticsParams.sink: AnalyticsSinks.extraGuess,
-    });
-    _gameOver = false;
-    _flash('Extra guess granted');
-    notifyListeners();
-  }
-
   /// Opt-in "watch ad → earn coins". Only awards on a real, earned view.
   Future<void> watchAdForCoins() async {
     if (!await _ads.showRewarded()) {
@@ -433,7 +565,7 @@ class GameController extends ChangeNotifier {
     if (_guesses.isEmpty) return null;
     return ShareFormatter.build(
       appName: Branding.appName,
-      dayNumber: _mode == GameMode.daily ? _words.dailyNumber() : null,
+      dayNumber: _mode == GameMode.daily ? _dailyNumber : null,
       guesses: _guesses,
       answer: _answer,
       won: _won,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
+import 'package:daily_word_game/logic/coin_rules.dart';
 import 'package:daily_word_game/models/letter_status.dart';
 import 'package:daily_word_game/screens/onboarding/onboarding_screen.dart';
 import 'package:daily_word_game/services/storage_service.dart';
@@ -208,6 +209,48 @@ void main() {
     });
   });
 
+  group('tutorial streak + the same day\'s real daily', () {
+    final today = DateTime.utc(2026, 10, 12, 15);
+    final tomorrow = DateTime.utc(2026, 10, 13, 15);
+
+    test('winning today\'s daily keeps streak 1 and offers no restore',
+        () async {
+      final storage = await _freshStorage();
+      await storage.beginStreakFromOnboarding(now: today);
+      final s = await storage.recordDailyResult(
+          won: true, guessesUsed: 4, now: today);
+      expect(s.currentStreak, 1);
+      expect(storage.pendingRestoreStreak(), 0,
+          reason: 'a brand-new player must never see "Restore streak"');
+      expect(s.gamesPlayed, 1);
+      expect(s.gamesWon, 1);
+
+      final next = await storage.recordDailyResult(
+          won: true, guessesUsed: 3, now: tomorrow);
+      expect(next.currentStreak, 2, reason: 'tomorrow makes it two');
+    });
+
+    test('losing today\'s daily keeps the tutorial day, offers no restore',
+        () async {
+      final storage = await _freshStorage();
+      await storage.beginStreakFromOnboarding(now: today);
+      final s = await storage.recordDailyResult(won: false, now: today);
+      expect(s.currentStreak, 1);
+      expect(storage.pendingRestoreStreak(), 0);
+      expect(s.gamesPlayed, 1);
+      expect(s.gamesWon, 0);
+    });
+  });
+
+  group('welcome coins', () {
+    test('granted exactly once', () async {
+      final storage = await _freshStorage();
+      expect(await storage.grantWelcomeCoins(CoinRules.welcomeCoins), isTrue);
+      expect(await storage.grantWelcomeCoins(CoinRules.welcomeCoins), isFalse);
+      expect(storage.coins, CoinRules.welcomeCoins);
+    });
+  });
+
   group('OnboardingScreen widget flow', () {
     testWidgets('skip sets the seen flag and does NOT seed a streak',
         (tester) async {
@@ -226,6 +269,8 @@ void main() {
       expect(storage.loadStats().currentStreak, 0, reason: 'skip seeds nothing');
       expect(storage.reminderEnabled, isFalse,
           reason: 'skip must not silently enable the reminder');
+      expect(storage.coins, CoinRules.welcomeCoins,
+          reason: 'skippers get the starter balance too');
     });
 
     testWidgets('winning sets the flag, seeds streak=1, leaves the daily free',
@@ -251,7 +296,8 @@ void main() {
       expect(storage.onboardingSeen, isTrue);
       expect(storage.loadStats().currentStreak, 1);
       expect(storage.isDailyDone(), isFalse, reason: 'daily stays playable');
-      expect(storage.coins, 0);
+      expect(storage.coins, CoinRules.welcomeCoins,
+          reason: 'a one-time starter balance, nothing else');
       expect(storage.reminderEnabled, isFalse,
           reason: 'ignoring the reminder card leaves it off');
     });

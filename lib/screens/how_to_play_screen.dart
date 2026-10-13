@@ -83,8 +83,8 @@ class HowToPlayScreen extends StatelessWidget {
                         LetterStatus.absent,
                       ],
                       leadColor: AppPalette.muted,
-                      caption: ' — T, O and the last T aren’t in the word '
-                          '(grey).',
+                      caption: ' — none of these letters are in the word '
+                          '(grey), so you can rule them all out.',
                     ),
                     const SizedBox(height: 24),
                     Container(
