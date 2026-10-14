@@ -1,0 +1,18 @@
+# Release signing — COPY this file to `android/key.properties` (gitignored)
+# and fill in the values. NEVER commit key.properties or the keystore.
+#
+#   cp android/key.properties.example android/key.properties
+#
+# storeFile is resolved relative to android/app/ (absolute paths work too).
+# Keep the keystore inside the project only under a gitignored name
+# (*.jks / *.keystore are ignored), e.g. android/app/upload-keystore.jks.
+#
+# The upload certificate Play expects has SHA-256
+#   9C:98:BD:2A:47:FE:E0:42:25:4B:CE:F3:69:57:36:1B:CE:75:51:E8:6D:31:DC:08:0D:D9:CC:69:6F:EA:22:54
+# Check yours with:
+#   keytool -list -v -keystore <keystore> -alias <keyAlias> | grep SHA256
+
+storePassword=
+keyPassword=
+keyAlias=
+storeFile=
