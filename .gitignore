@@ -49,3 +49,8 @@ app.*.map.json
 
 # Raw phone captures for the store screenshot composer
 store/raw/
+
+# Signing keys — never commit, wherever they sit in the repo.
+*.jks
+*.keystore
+key.properties
