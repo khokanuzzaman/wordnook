@@ -10,6 +10,7 @@ import 'services/coin_service.dart';
 import 'services/notification_service.dart';
 import 'services/storage_service.dart';
 import 'state/game_controller.dart';
+import 'system_ui.dart';
 import 'theme/app_theme.dart';
 
 Future<void> main() async {
@@ -17,6 +18,7 @@ Future<void> main() async {
   // The board + keyboard layout is portrait-only; landscape left the board
   // invisible on phones.
   await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
+  await enableEdgeToEdge();
 
   final storage = StorageService();
   await storage.init();
