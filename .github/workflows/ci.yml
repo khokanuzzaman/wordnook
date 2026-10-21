@@ -67,3 +67,36 @@ jobs:
             ' test-report.json
           fi
           exit $status
+
+  # Builds the release APK so R8 (minify + resource shrinking) runs on every
+  # change: a missing keep rule fails here, not on a player's phone. No secrets:
+  # without key.properties / admob.properties Gradle signs with the debug key
+  # and uses Google's TEST AdMob ids. Nothing is uploaded.
+  build-android-release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: 3.44.0
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Build release APK (R8)
+        run: |
+          set -o pipefail
+          flutter build apk --release 2>&1 | tee build.log || {
+            grep -E "Missing class|ERROR:|R8:|e: " build.log | head -40 | sed 's/^/::error::/'
+            exit 1
+          }
+          ls -l build/app/outputs/flutter-apk/app-release.apk

@@ -83,6 +83,16 @@ android {
             } else {
                 signingConfigs.getByName("debug")
             }
+            // R8: shrink, optimize and obfuscate Java/Kotlin code and strip
+            // unused resources (Play Console "Improve your app's memory and
+            // performance with R8 optimization"). Keep rules for plugins that
+            // use reflection live in proguard-rules.pro.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro",
+            )
         }
     }
 }
